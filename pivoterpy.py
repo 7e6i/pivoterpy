@@ -45,8 +45,8 @@ class Pivoter:
             self._from_edge_file(file_name, sep)
 
     def _from_adj_arr(self, arr):
-        assert len(arr) == len(arr[0])
-        edges, n, m = [], len(arr), 0
+        assert len(arr) == len(arr[0]), "Adjacency matrix must be square"
+        n, m, edges = len(arr), 0, []
         for i in range(n):
             for j in range(i+1, n):
                 if arr[i][j] == 1:
@@ -58,7 +58,7 @@ class Pivoter:
         edges = []
         for edge in arr:
             u, v = edge[0], edge[1]
-            assert 0 <= u < n and 0 <= v < n and u < v
+            assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
             edges.append((u,v))
         self.n, self.m, self.edges = n, len(edges), edges 
 
@@ -67,7 +67,7 @@ class Pivoter:
         with open(file_name, 'r') as f:
             for line in f:
                 u, v = map(int, line.strip().split(sep))
-                assert 0 <= u < n and 0 <= v < n and u < v
+                assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
                 edges.append((u,v))
         self.n, self.m, self.edges = n, len(edges), edges 
 
