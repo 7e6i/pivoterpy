@@ -1,6 +1,7 @@
 from math import comb
 from multiprocessing import Pool
 import copy
+#import numpy as np
 
 import sys
 sys.setrecursionlimit(10000) # just in case
@@ -150,9 +151,11 @@ class Pivoter:
             max_idx = 0
             for v in range(self.n):
                 for i in range(self.n, -1, -1):
+                    #if self.vertex_clique_counts[v, i] > 0: break
                     if self.vertex_clique_counts[v][i] > 0: break
               
                 max_idx = max(max_idx, i)
+            #self.vertex_clique_counts = self.vertex_clique_counts[:, 1:max_idx+1]
             self.vertex_clique_counts = [self.vertex_clique_counts[v][1:max_idx+1] for v in range(self.n)]
 
     def _choose_pivot(self, S):
@@ -176,7 +179,9 @@ class Pivoter:
         self.ec = 0
         self.clique_counts = [0 for _ in range(self.n+1)]
         if self.get_curv:
+          #self.vertex_clique_counts = np.zeros((self.n, self.n+1))
           self.vertex_clique_counts = [[0 for _ in range(self.n+1)] for _ in range(self.n)]
+          #self.curvatures = np.zeros((self.n))
           self.curvatures = [0 for _ in range(self.n)]
 
         # loop through nodes
@@ -202,12 +207,15 @@ class Pivoter:
 
                 if self.get_curv:
                   for v in hv:
+                    #self.vertex_clique_counts[v, h+i] += ncr
                     self.vertex_clique_counts[v][h+i] += ncr
                     self.curvatures[v] += pow(-1, h+i+1) * ncr / (h+i)
             if self.get_curv:
               for v in pv:
                 for i in range(0, p):
                   ncr = comb(p-1, i)
+
+                  #self.vertex_clique_counts[v, h+i+1] += ncr
                   self.vertex_clique_counts[v][h+i+1] += ncr
                   self.curvatures[v] += pow(-1, h+i+2) * ncr / (h+i+1)
             return
@@ -236,7 +244,9 @@ class Pivoter:
         self.ec = 0
         self.clique_counts = [0 for _ in range(self.n+1)]
         if self.get_curv:
+          #self.vertex_clique_counts = np.zeros((self.n, self.n+1))
           self.vertex_clique_counts = [[0 for _ in range(self.n+1)] for _ in range(self.n)]
+          #self.curvatures = np.zeros((self.n))
           self.curvatures = [0 for _ in range(self.n)]
         nodes = [SCTnode(self.degen_order_nbhds[v], (0,0), [[], []], v) for v in range(self.n)]
 
@@ -257,6 +267,7 @@ class Pivoter:
                 for v in range(self.n):
                     self.curvatures[v] += curv[v]
                     for i in range(self.n+1):
+                        #self.vertex_clique_counts[v, i] += v_counts[v, i]
                         self.vertex_clique_counts[v][i] += v_counts[v][i]
 
         self._trim_counts()
@@ -267,7 +278,9 @@ class Pivoter:
         self.clique_counts = [0 for _ in range(self.n+1)]
         self.ec = 0
         if self.get_curv:
+            #self.vertex_clique_counts = np.zeros((self.n, self.n+1))
             self.vertex_clique_counts = [[0 for _ in range(self.n+1)] for _ in range(self.n)]
+            #self.curvatures = np.zeros((self.n))
             self.curvatures = [0 for _ in range(self.n)]
 
         self._cnt_clq_mp_rec(parent)
@@ -289,6 +302,7 @@ class Pivoter:
 
                 if self.get_curv:
                     for v in hv:
+                        #self.vertex_clique_counts[v, h+i] += ncr
                         self.vertex_clique_counts[v][h+i] += ncr
                         self.curvatures[v] += pow(-1, h+i+1) * ncr / (h+i)
             
@@ -296,6 +310,7 @@ class Pivoter:
                 for v in pv:
                     for i in range(0, p):
                         ncr = comb(p-1, i)
+                        #self.vertex_clique_counts[v, h+i+1] += ncr
                         self.vertex_clique_counts[v][h+i+1] += ncr
                         self.curvatures[v] += pow(-1, h+i+2) * ncr / (h+i+1)
             return
