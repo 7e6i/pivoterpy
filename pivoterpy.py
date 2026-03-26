@@ -29,16 +29,19 @@ class Pivoter:
     - mode=edge: m x 2 array of edges (u,v) where u<v, u in {0,...,n-1}
     - mode=file: read edge array from file
     '''
-    def __init__(self, mode, array=None, file_name=None, sep=" "):
+    def __init__(self, mode, array=None, n=None, file_name=None, sep=" "):
         # n x n array, will only check upper triangle
         if mode == "adj":
             self._from_adj_arr(array)
 
         # m x 2 array, (u,v) where u<v
         elif mode == "edge":
-            self._from_edge_arr(array)
+            assert isinstance(n, int) and n > 0
+            self._from_edge_arr(array, n)
 
         elif mode == "file":
+            assert isinstance(n, int) and n > 0
+            assert file_name is not None
             self._from_edge_file(file_name, sep)
 
     def _from_adj_arr(self, arr):
@@ -51,23 +54,22 @@ class Pivoter:
                     m+=1
         self.n, self.m, self.edges = n, m, edges
 
-    def _from_edge_arr(self, arr):
-        nodes, m = set(), len(arr)
-        for i in range(m):
-            u, v = arr[i][0], arr[i][1]
-            assert u < v
-            nodes.update([u,v])
-        self.edges, self.n, self.m = arr, len(nodes), m
+    def _from_edge_arr(self, arr, n):
+        edges = []
+        for edge in arr:
+            u, v = edge[0], edge[1]
+            assert 0 <= u < n and 0 <= v < n and u < v
+            edges.append((u,v))
+        self.n, self.m, self.edges = n, len(edges), edges 
 
-    def _from_edge_file(self, file_name, sep):
-        edges, nodes = [], set()
+    def _from_edge_file(self, file_name, sep, n):
+        edges = []
         with open(file_name, 'r') as f:
             for line in f:
                 u, v = map(int, line.strip().split(sep))
-                assert u < v
+                assert 0 <= u < n and 0 <= v < n and u < v
                 edges.append((u,v))
-                nodes.update([u,v])
-        self.edges, self.n, self.m = edges, len(nodes), len(edges)
+        self.n, self.m, self.edges = n, len(edges), edges 
 
 
     # calculate neighborhoods, degrees, and nodes by degree
