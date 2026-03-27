@@ -1,6 +1,40 @@
 # pivoterpy
 Pure Python implementation of Pivoter clique counting algorithm.
 
+See instructions below on how to use, but first, the lore.
+
+## the lore...
+
+> April 1971 
+- Bron-Kerbosch algorithm created by... *C. Bron* and *J. Kerbosch*.
+- [Algorithm 457, Finding All Cliques of an Undirected Graph [H]](https://dl.acm.org/doi/pdf/10.1145/362342.362367)
+
+> October 2006
+- *E. Tomitaa*, *A. Tanaka*, *H. Takahashia* say this is a difficult problem.
+- [The worst-case time complexity for generating all maximal cliques
+and computational experiments](https://snap.stanford.edu/class/cs224w-readings/tomita06cliques.pdf)
+
+
+> Jun 2010, March 2011
+- Double header by *D. Eppstein*, *M. Loffler*, *D. Strash* ([code](https://github.com/darrenstrash/quick-cliques))
+- [Listing All Maximal Cliques in Sparse Graphs in
+Near-optimal Time](https://arxiv.org/pdf/1006.5440)
+- [Listing All Maximal Cliques in
+Large Sparse Real-World Graph](https://arxiv.org/pdf/1103.0318)
+
+
+> January 2020
+- *S. Jain*, *C. Seshadhri* drop an absolute banger: Pivoter ([code](https://github.com/sjain12/Pivoter)).
+- [The Power of Pivoting for Exact Clique Counting](https://arxiv.org/abs/2001.06784)
+
+> April 2022
+- **PyPivoter**: a python wrapper for the original C++ implementation ([code](https://github.com/rckormos/PyPivoter))
+
+
+> Oct 2025
+- **pivoterpy**: pure Python implementation (with parallelization!)
+
+
 ## installation
 
 ```
@@ -9,7 +43,7 @@ Pure Python implementation of Pivoter clique counting algorithm.
 from pivoterpy import Pivoter
 ```
 
-## setup
+## usage
 For edge lists, all entries must be (u,v) with 0<= u < v < n.
 
 ```
@@ -52,3 +86,4 @@ G.curvatures
 # todo
 - per edge clique counts
 - get on PyPI
+- max-clique size
