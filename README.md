@@ -84,6 +84,12 @@ G.curvatures
 
 
 # todo
+features
 - per edge clique counts
 - get on PyPI
-- max-clique size
+- max-clique size parameter
+
+settings
+- calculate ec, save clique counts?
+- calculate curvs, save vertex clique counts?
+- save edge clique counts?

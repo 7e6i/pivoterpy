@@ -187,9 +187,6 @@ class Pivoter:
             self._count_cliques_rec(node)
 
         self._trim_counts()
-        if self.get_curv:
-          return self.ec, self.clique_counts, self.curvatures, self.vertex_clique_counts
-        return self.ec, self.clique_counts
 
     def _count_cliques_rec(self, parent):
         # if parent.label is empty, update self.clique_counts, return
@@ -203,15 +200,15 @@ class Pivoter:
                 self.ec += pow(-1, h+i+1) * ncr
 
                 if self.get_curv:
-                  for v in hv:
-                    self.vertex_clique_counts[v][h+i] += ncr
-                    self.curvatures[v] += pow(-1, h+i+1) * ncr / (h+i)
+                    for v in hv:
+                        self.vertex_clique_counts[v][h+i] += ncr
+                        self.curvatures[v] += pow(-1, h+i+1) * ncr / (h+i)
             if self.get_curv:
-              for v in pv:
-                for i in range(0, p):
-                  ncr = comb(p-1, i)
-                  self.vertex_clique_counts[v][h+i+1] += ncr
-                  self.curvatures[v] += pow(-1, h+i+2) * ncr / (h+i+1)
+                for v in pv:
+                    for i in range(0, p):
+                        ncr = comb(p-1, i)
+                        self.vertex_clique_counts[v][h+i+1] += ncr
+                        self.curvatures[v] += pow(-1, h+i+2) * ncr / (h+i+1)
             return
 
         # find pivot and recurse
@@ -231,7 +228,7 @@ class Pivoter:
     '''
     parallelized implementation of count_cliques
     '''
-    def count_cliques_mp(self, get_curv = False, procs=1):
+    def count_cliques_mp(self, get_curv = False, procs = 1):
         self._count_clique_setup()
         self.get_curv = get_curv
 
