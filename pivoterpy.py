@@ -29,7 +29,7 @@ class Pivoter:
     - mode=edge: m x 2 array of edges (u,v) where u<v, u in {0,...,n-1}
     - mode=file: read edge array from file
     '''
-    def __init__(self, mode, array=None, n=None, file_name=None, sep=" "):
+    def __init__(self, mode, array=None, n=None):
         # n x n array, will only check upper triangle
         if mode == "adj":
             self._from_adj_arr(array)
@@ -39,17 +39,12 @@ class Pivoter:
             assert isinstance(n, int) and n > 0
             self._from_edge_arr(array, n)
 
-        elif mode == "file":
-            assert isinstance(n, int) and n > 0
-            assert file_name is not None
-            self._from_edge_file(file_name, sep)
-
     def _from_adj_arr(self, arr):
         assert len(arr) == len(arr[0]), "Adjacency matrix must be square"
         n, m, edges = len(arr), 0, []
         for i in range(n):
             for j in range(i+1, n):
-                if arr[i][j] == 1:
+                if arr[i][j] > 0:
                     edges.append((i,j))
                     m+=1
         self.n, self.m, self.edges = n, m, edges
@@ -60,15 +55,6 @@ class Pivoter:
             u, v = edge[0], edge[1]
             assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
             edges.append((u,v))
-        self.n, self.m, self.edges = n, len(edges), edges 
-
-    def _from_edge_file(self, file_name, sep, n):
-        edges = []
-        with open(file_name, 'r') as f:
-            for line in f:
-                u, v = map(int, line.strip().split(sep))
-                assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
-                edges.append((u,v))
         self.n, self.m, self.edges = n, len(edges), edges 
 
 
