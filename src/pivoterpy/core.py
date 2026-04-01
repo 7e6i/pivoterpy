@@ -27,7 +27,6 @@ class Pivoter:
     Initialize pivoter object
     - mode=adj: n x n adjacency matrix, only reads upper triangle
     - mode=edge: m x 2 array of edges (u,v) where u<v, u in {0,...,n-1}
-    - mode=file: read edge array from file
     '''
     def __init__(self, mode, array=None, n=None):
         # n x n array, will only check upper triangle
@@ -50,12 +49,12 @@ class Pivoter:
         self.n, self.m, self.edges = n, m, edges
 
     def _from_edge_arr(self, arr, n):
-        edges = []
+        edges = set()
         for edge in arr:
             u, v = edge[0], edge[1]
             assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
-            edges.append((u,v))
-        self.n, self.m, self.edges = n, len(edges), edges 
+            edges.add((u,v))
+        self.n, self.m, self.edges = n, len(edges), list(edges) 
 
 
     # calculate neighborhoods, degrees, and nodes by degree
@@ -297,41 +296,3 @@ class Pivoter:
             label = (parent.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
             hNode = SCTnode(label, parent.ph_cnt, parent.ph_v, hNodes[i])
             self._cnt_clq_mp_rec(hNode)
-
-
-'''
-example usage
-'''
-def main():
-    n, rr = 10, 1
-    # takes a few seconds depending on cpu
-
-    # construct adjacency matrix (only care about upper triangle)
-    arr = [[0 for _ in range(n)] for _ in range(n)]
-    for i in range(n):
-        for j in range(i+1,n):
-                arr[i][j] = 1 if random() < rr else 0
-                arr[j][i] = arr[i][j]
-
-    # serial implementation
-    t0 = time()
-    p = Pivoter("adj", arr)
-    p.count_cliques()
-    print(p.ec, p.clique_counts)
-    print(f'{time()-t0:.2f} seconds')
-
-    # parallelized implementation
-    # (will take longer for smaller/sparse graphs)
-    t0 = time()
-    p = Pivoter("adj", arr)
-    p.count_cliques_mp(procs=2, get_curv=True)
-    print(p.ec, p.clique_counts)
-    print(p.curvatures)
-    print(p.vertex_clique_counts)
-    print(f'{time()-t0:.2f} seconds')
-
-if __name__ == "__main__":
-    from random import random, seed
-    from time import time
-    seed(42)
-    main()

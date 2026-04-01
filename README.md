@@ -1,7 +1,77 @@
 # pivoterpy
-Pure Python implementation of Pivoter clique counting algorithm.
+Pure Python implementation of Pivoter clique counting algorithm by **S. Jain** and **C. Seshadhri** 
 
 See instructions below on how to use, but first, the lore.
+
+## quick start
+
+```
+# pip install git+https://github.com/7e6i/pivoterpy
+
+from pivoterpy import Pivoter
+
+G = Pivoter("adj", array=adj_matrix)
+
+G.count_cliques()
+
+G.clique_counts
+```
+
+## timings
+- Tested on complete graphs with $k$ nodes.
+- **CPU**: AMD Ryzen 5 3600, **RAM**: 2x16GB DDR4-3200 CL16
+
+**Results**
+
+| $k$  | 100  | 200  | 300  | 400  | 500  | 600  | 700  | 800  | 900  | 1000 |
+| ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+| time | 0:00 | 0:02 | 0:15 | 1:01 | 0:29 | 1:02 | 1:53 | 2:06 | 3:17 | 4:51 |
+| procs |      |      |      |      | 4    | 4    | 4    | 8    | 8    | 8    |
+
+
+
+# Documentation
+
+## usage
+For edge lists, all entries must be $(u,v)$ with $u,v\in\mathbb{Z}$ and $0\le u < v < n$.
+
+```
+# (n x n) adjacency matrix
+G = Pivoter("adj", array=matrix)
+
+# (m x 2) edge list (and number of nodes)
+G = Pivoter("edge", array=edge_list, n=nodes)
+
+# available after construction
+G.neighborhoods
+G.degrees
+G.by_degrees
+G.degeneracy
+G.node_by_degen_order
+G.degen_order_by_node
+G.degen_order_nbhds
+```
+
+## counting
+Non multi-proc better for small dense graphs.
+Multi-proc better for large sparse graphs.
+
+```
+# calculations
+G.count_cliques(get_curv=True) 
+G.count_cliques_mp(procs=4)
+
+
+# available results
+G.ec
+G.clique_counts
+
+# if get_curv=True
+G.vertex_clique_counts
+G.curvatures
+```
+
+# Extras
 
 ## the lore...
 
@@ -34,53 +104,6 @@ Large Sparse Real-World Graph](https://arxiv.org/pdf/1103.0318)
 > Oct 2025
 - **pivoterpy**: pure Python implementation (with parallelization!)
 
-
-## installation
-
-```
-# pip install git+https://github.com/7e6i/pivoterpy
-
-from pivoterpy import Pivoter
-```
-
-## usage
-For edge lists, all entries must be (u,v) with 0<= u < v < n.
-
-```
-# (n x n) adjacency matrix
-G = Pivoter("adj", array=matrix)
-
-# (m x 2) edge list (and number of nodes)
-G = Pivoter("edge", array=edge_list, n=nodes)
-
-# available after construction
-G.neighborhoods
-G.degrees
-G.by_degrees
-G.degeneracy
-G.node_by_degen_order
-G.degen_order_by_node
-G.degen_order_nbhds
-```
-
-## counting
-Non mp better for small dense graphs.
-Mp better for large sparse graphs.
-
-```
-# calculations
-G.count_cliques(get_curv=True) 
-G.count_cliques_mp(procs=4)
-
-
-# available results
-G.ec
-G.clique_counts
-
-# if get_curv=True
-G.vertex_clique_counts
-G.curvatures
-```
 
 
 # todo
