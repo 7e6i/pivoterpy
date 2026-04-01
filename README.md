@@ -7,13 +7,13 @@ Based on <u>The Power of Pivoting for Exact Clique Counting</u> by *S. Jain*, *C
 ## quick start
 
 ```
-# pip install git+https://github.com/7e6i/pivoterpy
+# pip install pivoterpy
 
 from pivoterpy import Pivoter
 
-G = Pivoter("adj", array=adj_matrix)
+G = Pivoter.from_adj_matrix(adj_matrix)
 
-G.count_cliques()
+G.count()
 
 G.clique_counts
 ```
@@ -37,11 +37,11 @@ G.clique_counts
 For edge lists, all entries must be $(u,v)$ with $u,v\in\mathbb{Z}$ and $0\le u < v < n$.
 
 ```
-# (n x n) adjacency matrix
-G = Pivoter("adj", array=matrix)
+# (n x n) adjacency matrix. Entry > 0 indicates an edge.
+G = Pivoter.from_adj_matrix(matrix = adj_matrix)
 
 # (m x 2) edge list (and number of nodes)
-G = Pivoter("edge", array=edge_list, n=nodes)
+G = Pivoter.from_edge_list(array = edge_list, n = nodes)
 
 # available after construction
 G.neighborhoods
@@ -54,20 +54,18 @@ G.degen_order_nbhds
 ```
 
 ## counting
-Non multi-proc better for small dense graphs.
-Multi-proc better for large sparse graphs.
+- Non multi-proc (default) is generally better for small dense graphs.
+- Multi-proc is better for large graphs.
 
 ```
-# calculations
-G.count_cliques(get_curv=True) 
-G.count_cliques_mp(procs=4)
-
+G.count(procs=4) # default is procs=0
+G.count(get_curv=True) # vertex clique counts
 
 # available results
 G.ec
 G.clique_counts
 
-# if get_curv=True
+# with get_curv=True
 G.vertex_clique_counts
 G.curvatures
 ```
