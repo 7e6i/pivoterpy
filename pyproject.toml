@@ -4,11 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pivoterpy"
-version = "0.1.2"
+version = "0.1.3"
 description = "Pure Python implementation of Pivoter clique counting algorithm."
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = []
 
-[tool.setuptools]
-py-modules = ["pivoterpy"]
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+dev = [
+    "pytest>=7.0",
+    "build",
+    "twine",
+]
