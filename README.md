@@ -11,7 +11,7 @@ Based on <u>The Power of Pivoting for Exact Clique Counting</u> by *S. Jain*, *C
 
 from pivoterpy import Pivoter
 
-G = Pivoter.from_adj_matrix(adj_matrix)
+G = Pivoter.from_adj_matrix(array)
 
 G.count()
 
@@ -38,10 +38,10 @@ For edge lists, all entries must be $(u,v)$ with $u,v\in\mathbb{Z}$ and $0\le u 
 
 ```
 # (n x n) adjacency matrix. Entry > 0 indicates an edge.
-G = Pivoter.from_adj_matrix(matrix = adj_matrix)
+G = Pivoter.from_adj_matrix(adj_matrix)
 
 # (m x 2) edge list (and number of nodes)
-G = Pivoter.from_edge_list(array = edge_list, n = nodes)
+G = Pivoter.from_edge_list(edge_list, n)
 
 # available after construction
 G.neighborhoods
