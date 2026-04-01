@@ -2,8 +2,15 @@ from math import comb
 from multiprocessing import Pool
 import copy
 
+
 import sys
 sys.setrecursionlimit(10000) # just in case
+
+from collections.abc import Sequence
+type Numeric = int | float | bool
+type AdjMatrix = Sequence[Sequence[Numeric]]
+
+
 
 class SCTnode:
     def __init__(self, label, ph_cnt, ph_v, v, call_type="h"):
@@ -28,33 +35,66 @@ class Pivoter:
     - mode=adj: n x n adjacency matrix, only reads upper triangle
     - mode=edge: m x 2 array of edges (u,v) where u<v, u in {0,...,n-1}
     '''
-    def __init__(self, mode, array=None, n=None):
-        # n x n array, will only check upper triangle
-        if mode == "adj":
-            self._from_adj_arr(array)
 
-        # m x 2 array, (u,v) where u<v
-        elif mode == "edge":
-            assert isinstance(n, int) and n > 0
-            self._from_edge_arr(array, n)
+    def __init__(self, n: int, m: int, edges: list[tuple[int, int]]):
+        """Pivoter constructor"""
 
-    def _from_adj_arr(self, arr):
-        assert len(arr) == len(arr[0]), "Adjacency matrix must be square"
-        n, m, edges = len(arr), 0, []
+        self.n = n
+        self.m = m
+        self.edges = edges
+
+    @classmethod
+    def from_adj_matrix(cls, array: AdjMatrix) -> 'Pivoter':
+        """
+        Creates a Pivoter instance from the upper triangle of a square adjacency matrix.
+
+        Args:
+            arr: A 2D list representing an n x n square adjacency matrix 
+                 where values > 0 indicate an edge.
+
+        Returns:
+            A populated Pivoter object containing the node count, 
+            edge count, and a list of edge tuples.
+
+        Raises:
+            AssertionError: If the provided matrix is not square.
+        """
+
+        assert len(array) == len(array[0]), "Adjacency matrix must be square"
+
+        n = len(array)
+        edges = []
         for i in range(n):
             for j in range(i+1, n):
-                if arr[i][j] > 0:
+                if array[i][j] > 0:
                     edges.append((i,j))
-                    m+=1
-        self.n, self.m, self.edges = n, m, edges
 
-    def _from_edge_arr(self, arr, n):
+        return cls(n=n, m=len(edges), edges=edges)
+
+    @classmethod
+    def from_edge_list(cls, array: list[tuple[int, int]], n: int) -> 'Pivoter':
+        """
+        Creates a Pivoter instance from a list of (u, v) tuples representing edges.
+
+        Args:
+            arr: A 2D list representing an m x 2 list of (u, v) edges.
+            n: The number of nodes in the graph.
+
+        Returns:
+            Pivoter: A populated Pivoter object.
+
+        Raises:
+            AssertionError: If the provided list is not a list of tuples.
+            AssertionError: If 0 <= u < v < n is not met.
+        """
+
         edges = set()
-        for edge in arr:
-            u, v = edge[0], edge[1]
+        for u, v in array:
+            assert isinstance(u, int) and isinstance(v, int), "Node indices must be integers"
             assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
             edges.add((u,v))
-        self.n, self.m, self.edges = n, len(edges), list(edges) 
+        
+        return cls(n=n, m=len(edges), edges=list(edges))
 
 
     # calculate neighborhoods, degrees, and nodes by degree
@@ -73,16 +113,21 @@ class Pivoter:
 
         # list of vertices by degree
         self.by_degrees = [set() for _ in range(self.n)]
-        for i in range(self.n):
-            self.by_degrees[self.degrees[i]].add(i)
+        for v in range(self.n):
+            self.by_degrees[self.degrees[v]].add(v)
 
     def _degeneracy_ordering(self):
         # node v is at the rth position in the ordering: L1[r]=v, L2[v]=r
-        L1, L2 = [], [None for _ in range(self.n)]
+        L1 = []
+        L2 = [None for _ in range(self.n)]
+
+        # temporary duplicate copies to avoid mutation
         by_degrees = self.by_degrees[:]
         degrees = self.degrees[:]
 
-        rank, k = 0, 0
+        rank = 0
+        k = 0
+
         # loop through nodes
         for _ in range(self.n):
             # find the node with lowest degree
@@ -92,7 +137,9 @@ class Pivoter:
             # update k, update v, change L1/L2 accordingly
             k = max(k, i)
             v = by_degrees[i].pop()
-            L1.append(v); L2[v] = rank; rank += 1
+            L1.append(v); 
+            L2[v] = rank
+            rank += 1
             degrees[v] = -1
 
             # update w in N(v)\L
@@ -152,11 +199,26 @@ class Pivoter:
 
 
     '''
-    serial implementation
+    wrapper to encompass count_cliques and count_cliques_mp
+    '''
+    def count(self, procs: int = 0, get_curv: bool = False):
+        assert isinstance(procs, int) and procs >= -1, "Processes must be a non-negative integer"
+        self.procs = procs
+        self.get_curv = get_curv
+
+        if procs == 0:
+            self.count_cliques(get_curv)
+
+        elif procs >= 1:
+            self.count_cliques_mp(get_curv, procs)
+
+
+    '''
+    1 process recursive implementation
     - helpful to learn how the algorithm works
     - good starting point to implement node/edge specific counts
     '''
-    def count_cliques(self, get_curv = False):
+    def count_cliques(self, get_curv: bool):
         self._count_clique_setup()
         self.get_curv = get_curv
 
