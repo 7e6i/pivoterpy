@@ -1,7 +1,8 @@
 # pivoterpy
-Pure Python implementation of Pivoter clique counting algorithm by **S. Jain** and **C. Seshadhri** 
+Pure Python implementation of `Pivoter` clique counting algorithm.
 
-See instructions below on how to use, but first, the lore.
+Based on <u>The Power of Pivoting for Exact Clique Counting</u> by *S. Jain*, *C. Seshadhri*.
+
 
 ## quick start
 
@@ -73,7 +74,7 @@ G.curvatures
 
 # Extras
 
-## the lore...
+## the academic lore...
 
 > April 1971 
 - Bron-Kerbosch algorithm created by... *C. Bron* and *J. Kerbosch*.
@@ -86,28 +87,33 @@ and computational experiments](https://snap.stanford.edu/class/cs224w-readings/t
 
 
 > Jun 2010, March 2011
-- Double header by *D. Eppstein*, *M. Loffler*, *D. Strash* ([code](https://github.com/darrenstrash/quick-cliques))
+- Double header by *D. Eppstein*, *M. Loffler*, *D. Strash*. ([code](https://github.com/darrenstrash/quick-cliques))
 - [Listing All Maximal Cliques in Sparse Graphs in
 Near-optimal Time](https://arxiv.org/pdf/1006.5440)
 - [Listing All Maximal Cliques in
 Large Sparse Real-World Graph](https://arxiv.org/pdf/1103.0318)
+- *D. Strash* creates `quick-clicks` for maximal cliques. ([code](https://github.com/darrenstrash/quick-cliques))
 
 
 > January 2020
-- *S. Jain*, *C. Seshadhri* drop an absolute banger: Pivoter ([code](https://github.com/sjain12/Pivoter)).
+- *S. Jain*, *C. Seshadhri* drop an absolute banger: `Pivoter`.
 - [The Power of Pivoting for Exact Clique Counting](https://arxiv.org/abs/2001.06784)
-
-> April 2022
-- **PyPivoter**: a python wrapper for the original C++ implementation ([code](https://github.com/rckormos/PyPivoter))
+- Code available on [GitHub](https://github.com/sjain12/Pivoter) and [BitBucket](https://bitbucket.org/sjain12/pivoter/src/)
 
 
-> Oct 2025
-- **pivoterpy**: pure Python implementation (with parallelization!)
+## implementations
+- Pivoter - Julia implementation by *charunupara*. ([code](https://github.com/charunupara/Pivoter))
+
+- PyPivoter - Cython implementation by *rckormos*. ([code](https://github.com/rckormos/PyPivoter))
+
+- **pivoterpy** - pure Python implementation with parallelization!
+
 
 
 
 # todo
 features
+- make docs
 - per edge clique counts
 - get on PyPI
 - max-clique size parameter
