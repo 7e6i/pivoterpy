@@ -254,22 +254,24 @@ class Pivoter:
         self.global_counts = [0] * (self.n+1)
         self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if get_curv else None
 
+        self.max_depth = 0
 
         ### begin counting
         roots = range(self.n)
 
-        if procs <= 1:
+        if procs <= 0:
             # Sequential execution
             for v in roots:
-                g_counts, v_counts = self._count_from_root(v)
-                self._aggregate(g_counts, v_counts)
+                g_counts, v_counts, worker_depth = self._count_from_root(v)
+                self._aggregate(g_counts, v_counts, worker_depth)
         else:
             # Parallel execution
             with Pool(processes=procs) as pool:
+                chunk = max(1, len(roots)// (procs * 4))
                 # imap_unordered is faster than map because it yields results 
                 # immediately as processes finish, rather than waiting for them all to complete in order.
-                for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots):
-                    self._aggregate(g_counts, v_counts)
+                for g_counts, v_counts, worker_depth in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
+                    self._aggregate(g_counts, v_counts, worker_depth)
 
         self._trim_trailing_zeros()
 
@@ -278,15 +280,20 @@ class Pivoter:
     def _count_from_root(self, v: int) -> tuple[int, list[int]]:
         global_counts = [0] * (self.n+1)
         vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
+        max_depth = 0
 
         def child_generator(ego):
             """Identical generator, but updates local state."""
+            nonlocal max_depth
             p, h = ego.ph_cnt
             
             # reached a leaf node
             if not ego.label:
                 if self.get_curv:
                     pv, hv = self._unpack_chain(ego.ph_chn)
+
+                if p+h > max_depth:
+                    max_depth = p + h
 
                 # from the paper
                 for i in range(0, p + 1):
@@ -336,9 +343,9 @@ class Pivoter:
                 stack.pop()
 
         # Return the "process" results
-        return global_counts, vertex_counts
+        return global_counts, vertex_counts, max_depth
 
-    def _aggregate(self, global_counts, vertex_counts) -> None:
+    def _aggregate(self, global_counts, vertex_counts, worker_depth) -> None:
         """Merges worker results back into the global state."""
 
         for k, c in enumerate(global_counts):
@@ -348,6 +355,8 @@ class Pivoter:
             for v, row in enumerate(vertex_counts):
                 for k, c in enumerate(row):
                     self.vertex_counts[v][k] += c
+
+        self.max_depth = max(self.max_depth, worker_depth)
 
 
     @property
