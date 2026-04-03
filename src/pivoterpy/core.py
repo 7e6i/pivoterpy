@@ -187,19 +187,27 @@ class Pivoter:
     helper functions
     '''
 
-    def _trim_counts(self):
-        for i in range(self.n, -1, -1):
-            if self.clique_counts[i] > 0: break
-        self.clique_counts = self.clique_counts[1:i+1]
+    def _trim_trailing_zeros(self) -> None:
+        """Removes trailing zeros from the counts arrays."""
+        if not self.global_counts:
+            return
+        
+        # Find the index of the largest clique size
+        max_k = 0
+        for k in range(len(self.global_counts) - 1, -1, -1):
+            if self.global_counts[k] > 0:
+                max_k = k
+                break
+        
+        self.max_k = max_k
 
-        if self.get_curv:
-            max_idx = 0
+        # Slice global counts
+        self.global_counts = self.global_counts[:max_k + 1]
+
+        # Slice every row in vertex counts (if they exist)
+        if self.vertex_counts:
             for v in range(self.n):
-                for i in range(self.n, -1, -1):
-                    if self.vertex_clique_counts[v][i] > 0: break
-              
-                max_idx = max(max_idx, i)
-            self.vertex_clique_counts = [self.vertex_clique_counts[v][1:max_idx+1] for v in range(self.n)]
+                self.vertex_counts[v] = self.vertex_counts[v][:max_k + 1]
 
     def _choose_pivot(self, S):
         pivot = None
@@ -271,6 +279,8 @@ class Pivoter:
                 # immediately as processes finish, rather than waiting for them all to complete in order.
                 for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots):
                     self._aggregate(g_counts, v_counts)
+
+        self._trim_trailing_zeros()
 
 
 
@@ -385,3 +395,24 @@ class Pivoter:
             curvatures.append(curv)
             
         return curvatures
+    
+
+    @property
+    def ec(self) -> list[int]:
+        """Alias for global_ec."""
+        return self.global_ec
+
+    @property
+    def clique_counts(self) -> list[int]:
+        """Alias for global_counts."""
+        return self.global_counts
+    
+    @property
+    def curvatures(self) -> list[int]:
+        """Alias for vertex_curv."""
+        return self.vertex_curv
+    
+    @property
+    def vertex_clique_counts(self) -> list[int]:
+        """Alias for vertex_counts."""
+        return self.vertex_counts
