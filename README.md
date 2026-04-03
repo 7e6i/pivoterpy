@@ -1,8 +1,9 @@
 # pivoterpy
-Pure Python implementation of `Pivoter` clique counting algorithm.
+Parallelized pure Python implementation of the `Pivoter` clique counting algorithm.
 
 Based on <u>The Power of Pivoting for Exact Clique Counting</u> by *S. Jain*, *C. Seshadhri*.
 
+>*The fasest clique counter this side of the Mississippi. - Sun Tzu*
 
 ## quick start
 
@@ -34,45 +35,58 @@ G.clique_counts
 # Documentation
 
 ## usage
-For edge lists, all entries must be $(u,v)$ with $u,v\in\mathbb{Z}$ and $0\le u < v < n$.
+Requires a N x N adjacency matrix. Only upper triangle is used.
+
+Edges are created for entries > 0 (or True).
 
 ```
-# (n x n) adjacency matrix. Entry > 0 indicates an edge.
-G = Pivoter.from_adj_matrix(adj_matrix)
+G = Pivoter.from_adj_matrix(array)
+```
 
-# (m x 2) edge list (and number of nodes)
-G = Pivoter.from_edge_list(edge_list, n)
+Requies a M x 2 edge matrix and the positive integer number of nodes $n$.
 
-# available after construction
-G.neighborhoods
-G.degrees
-G.by_degrees
-G.degeneracy
-G.node_by_degen_order
-G.degen_order_by_node
-G.degen_order_nbhds
+Note: all elements must be $(u,v)$ with $u,v\in\mathbb{Z}$ and $0\le u < v < n$.
+```
+G = Pivoter.from_edge_list(array, n)
+```
+
+
+Values available after construction.
+```
+G.neighborhoods         # list of sets
+G.degrees               # list of ints
+G.by_degrees            # list of sets
+G.degeneracy            # int
+G.node_by_degen_order   # list of ints
+G.degen_order_by_node   # list of ints
+G.degen_order_nbhds     # list of sets
 ```
 
 ## counting
-- Non multi-proc (default) is generally better for small dense graphs.
-- Multi-proc is better for large graphs.
+
+Multiprocessing is generally only beneficial for especially large or dense graphs.
 
 ```
-G.count(procs=4) # default is procs=0
-G.count(get_curv=True) # vertex clique counts
+G.count(procs=4) # default is procs=0 (avoids mp.Pool)
+G.count(get_curv=True) # default is get_curv=False
+```
 
-# available results
-G.ec
-G.clique_counts
+Results available after completion.
+```
+G.max_k         # max clique size
+G.global_ec     # G.ec
+G.global_counts # G.clique_counts
+```
 
-# with get_curv=True
-G.vertex_clique_counts
-G.curvatures
+With `get_curv` set to `True`.
+```
+G.vertex_curv   # G.curvatures
+G.vertex_counts # G.vertex_clique_counts
 ```
 
 # Extras
 
-## the academic lore...
+## the lore...
 
 > April 1971 
 - Bron-Kerbosch algorithm created by... *C. Bron* and *J. Kerbosch*.
@@ -105,18 +119,3 @@ Large Sparse Real-World Graph](https://arxiv.org/pdf/1103.0318)
 - PyPivoter - Cython implementation by *rckormos*. ([code](https://github.com/rckormos/PyPivoter))
 
 - **pivoterpy** - pure Python implementation with parallelization!
-
-
-
-
-# todo
-features
-- make docs
-- per edge clique counts
-- get on PyPI
-- max-clique size parameter
-
-settings
-- calculate ec, save clique counts?
-- calculate curvs, save vertex clique counts?
-- save edge clique counts?
