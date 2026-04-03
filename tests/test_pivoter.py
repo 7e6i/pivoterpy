@@ -17,11 +17,13 @@ def timer():
 
     for _ in range(1):
 
-        t0 = time()
+        
         G = complete_graph(30)
         #G = erodos_reyni(100, .05)
         
+        
         pivoter = Pivoter.from_adj_matrix(G)
+        t0 = time()
         pivoter.count()
         
 

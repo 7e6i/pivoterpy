@@ -113,59 +113,65 @@ class Pivoter:
         return cls(n=n, m=len(edges), edges=list(edges))
 
 
-    # calculate neighborhoods, degrees, and nodes by degree
     def _setup(self):
+        """calculate neighborhoods, degrees, and nodes by degree"""
+
+        # neighborhood of nodes
         self.neighborhoods = [set() for _ in range(self.n)]
-        self.degrees = [0 for _ in range(self.n)]
+        for u, v in self.edges:
+            self.neighborhoods[u].add(v)
+            self.neighborhoods[v].add(u)
 
-        for edge in self.edges:
-            # neighborhood of nodes
-            self.neighborhoods[edge[0]].add(edge[1])
-            self.neighborhoods[edge[1]].add(edge[0])
-
-            # degrees of nodes
-            self.degrees[edge[0]] += 1
-            self.degrees[edge[1]] += 1
+        # degrees of nodes
+        self.degrees = [len(nbhd) for nbhd in self.neighborhoods]
 
         # list of vertices by degree
         self.by_degrees = [set() for _ in range(self.n)]
-        for v in range(self.n):
-            self.by_degrees[self.degrees[v]].add(v)
+        for v, degree in enumerate(self.degrees):
+            self.by_degrees[degree].add(v)
 
     def _degeneracy_ordering(self):
+        """degeneracy ordering of the nodes to optimize SCT construction"""
+
         # node v is at the rth position in the ordering: L1[r]=v, L2[v]=r
         L1 = []
-        L2 = [None for _ in range(self.n)]
+        L2 = [None] * self.n
 
         # temporary duplicate copies to avoid mutation
-        by_degrees = self.by_degrees[:]
+        by_degrees = [s.copy() for s in self.by_degrees]
         degrees = self.degrees[:]
 
         rank = 0
         k = 0
+        min_deg = 0
 
         # loop through nodes
         for _ in range(self.n):
             # find the node with lowest degree
-            for i in range(self.n):
-                if by_degrees[i]: break
+            while not by_degrees[min_deg]:
+                min_deg += 1
 
             # update k, update v, change L1/L2 accordingly
-            k = max(k, i)
-            v = by_degrees[i].pop()
-            L1.append(v); 
+            k = max(k, min_deg)
+            v = by_degrees[min_deg].pop()
+
+            L1.append(v)
             L2[v] = rank
             rank += 1
             degrees[v] = -1
 
             # update w in N(v)\L
             for w in self.neighborhoods[v]:
-                if degrees[w] == -1:
+                dw = degrees[w]
+                if dw == -1:
                     continue
 
-                by_degrees[degrees[w]].remove(w)
+                by_degrees[dw].remove(w)
                 degrees[w] -= 1
-                by_degrees[degrees[w]].add(w)
+                by_degrees[dw - 1].add(w)
+
+                if degrees[w] < min_deg:
+                    min_deg = degrees[w]
 
         self.degeneracy = k
         self.node_by_degen_order = L1
@@ -173,13 +179,18 @@ class Pivoter:
 
 
     def _degeneracy_neighborhoods(self):
-        degen_order_nbhds = [] # arr[v] = N^+(v)
-        for v in range(self.n):
-            rank = self.degen_order_by_node[v]
-            later_nodes = set([u for u in self.node_by_degen_order[rank+1:]])
-            v_nbhd = self.neighborhoods[v]
+        degen_order_nbhds = [None] * self.n # arr[v] = N^+(v)
+        ranks = self.degen_order_by_node
 
-            degen_order_nbhds.append(later_nodes & v_nbhd) # set intersection
+        for v in range(self.n):
+            v_rank = ranks[v]
+
+            forward_neighbors = {
+                u for u in self.neighborhoods[v]
+                if ranks[u] > v_rank
+            }
+
+            degen_order_nbhds[v] = forward_neighbors
 
         self.degen_order_nbhds = degen_order_nbhds
 
@@ -189,35 +200,40 @@ class Pivoter:
 
     def _trim_trailing_zeros(self) -> None:
         """Removes trailing zeros from the counts arrays."""
-        if not self.global_counts:
+        global_counts = self.global_counts
+        vertex_counts = self.vertex_counts
+
+        if not global_counts:
             return
         
         # Find the index of the largest clique size
         max_k = 0
-        for k in range(len(self.global_counts) - 1, -1, -1):
-            if self.global_counts[k] > 0:
-                max_k = k
+        for k in range(1, len(global_counts)):
+            if global_counts[k] == 0:
+                max_k = k - 1
                 break
+        else:
+            max_k = len(global_counts) - 1 # if graph is complete
         
         self.max_k = max_k
-
-        # Slice global counts
         self.global_counts = self.global_counts[:max_k + 1]
-
-        # Slice every row in vertex counts (if they exist)
-        if self.vertex_counts:
-            for v in range(self.n):
-                self.vertex_counts[v] = self.vertex_counts[v][:max_k + 1]
+        if vertex_counts:
+            self.vertex_counts = [row[:max_k + 1] for row in vertex_counts]
 
     def _choose_pivot(self, S):
         pivot = None
-        max_nbdh = -1
+        max_nbhd = -1
+        max_possible = len(S) -1
+
         for v in S:
-            nbhd = self.neighborhoods[v]
-            size = len(nbhd & S)
-            if size > max_nbdh: 
-                max_nbdh = size
+            size = len(self.neighborhoods[v] & S)
+
+            if size > max_nbhd: 
+                max_nbhd = size
                 pivot = v
+
+                if max_nbhd == max_possible: # break early if possible
+                    break
         return pivot
     
     def _unpack_chain(self, chain_tuple) -> tuple[list[int], list[int]]:
@@ -336,8 +352,8 @@ class Pivoter:
             active_gen = stack[-1]
 
             # try to get the next item from the generator
-            # if successful, 
-            # if out of items, pop
+            # if successful, append generator of children
+            # if out of items, pop the genny
             try:
                 next_node = next(active_gen)
                 stack.append(child_generator(next_node))
