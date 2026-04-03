@@ -13,27 +13,30 @@ def erodos_reyni(n, p):
     
 def timer():
 
+    inits = []
     times = []
 
     for _ in range(1):
 
-        t0 = time()
-        G = complete_graph(3)
-        #G = erodos_reyni(1000, 0.1)
-        
-        pivoter = Pivoter.from_adj_matrix(G)
-        pivoter.count(get_curv=True)
+        #G = complete_graph(100)
+        G = erodos_reyni(2000, .1)
 
+        t0 = time()
+        H = Pivoter.from_adj_matrix(G)
+        t = time() - t0
+        inits.append(t)
+        print(f'{t:.4f}s,', end=' ')
+
+        t0 = time()
+        H.count()
         t = time() - t0
         times.append(t)
-        print(f'Trial {_+1} took {t:.4f} seconds')
+        print(f'{_+1}: {t:.4f}s')
 
-        print(pivoter.ec)
-        print(pivoter.clique_counts)
-        print(pivoter.curvatures)
-        print(pivoter.vertex_clique_counts)
 
-    print(f'Mean {sum(times)/len(times):.4f}')
+    print(f'Inits {sum(inits)/len(inits):.2f}s')
+    print(f'Counts {sum(times)/len(times):.2f}s')
+    print(H.ec, H.max_k, H.max_depth)
 
 if __name__ == '__main__':
     timer()
