@@ -217,7 +217,7 @@ class Pivoter:
         Flattens a single tuple chain into a list of vertices.
         """
         if chain_tuple is None:
-            return []
+            return [], []
             
         pivot_list = []
         hold_list = []
@@ -230,7 +230,7 @@ class Pivoter:
             if edge == 1:
                 pivot_list.append(v)
             elif edge == 0:
-                pivot_list.append(v)
+                hold_list.append(v)
 
             current = parent_chain
             
@@ -252,9 +252,7 @@ class Pivoter:
         self.procs = procs
         self.get_curv = get_curv
 
-        self.global_ec = 0
         self.global_counts = [0] * (self.n+1)
-        self.vertex_curv = [0] * self.n if get_curv else None
         self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if get_curv else None
 
 
@@ -264,33 +262,24 @@ class Pivoter:
         if procs <= 1:
             # Sequential execution
             for v in roots:
-                data = self._count_from_root(v)
-                self._aggregate(data)
+                g_counts, v_counts = self._count_from_root(v)
+                self._aggregate(g_counts, v_counts)
         else:
             # Parallel execution
             with Pool(processes=procs) as pool:
                 # imap_unordered is faster than map because it yields results 
                 # immediately as processes finish, rather than waiting for them all to complete in order.
-                for data in pool.imap_unordered(self._count_from_root, roots):
-                    self._aggregate(data)
+                for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots):
+                    self._aggregate(g_counts, v_counts)
 
 
 
     def _count_from_root(self, v: int) -> tuple[int, list[int]]:
-        """
-        The MAP phase. 
-        Runs the exact same DFS, but isolated to a single root node.
-        """
-        # 1. Isolate the state. (We use a list for EC to allow mutation inside the closure)
-        global_ec = 0
         global_counts = [0] * (self.n+1)
-
-        vertex_curv = [0] * self.n if self.get_curv else None
         vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
 
         def child_generator(ego):
             """Identical generator, but updates local state."""
-            nonlocal global_ec # allows assignment inside the closure
             p, h = ego.ph_cnt
             
             # reached a leaf node
@@ -301,21 +290,16 @@ class Pivoter:
                 # from the paper
                 for i in range(0, p + 1):
                     ncr = comb(p, i)
-                    global_ec += pow(-1, h+i+1) * ncr
                     global_counts[h+i] += ncr
 
-                    # vertex counts
-                    if self.get_curv:   
+                    if self.get_curv: # vertex counts 
                         for v in hv:
-                            vertex_curv[v] += pow(-1, h+i+1) * ncr / (h+i)
                             vertex_counts[v][h+i] += ncr
 
-                # vertex counts
-                if self.get_curv:
+                if self.get_curv: # vertex counts
                     for i in range(0, p):
                         ncr = comb(p - 1, i)
                         for v in pv:
-                            vertex_curv[v] += pow(-1, h+i+2) * ncr / (h+i+1)
                             vertex_counts[v][h+i+1] += ncr
 
                 return 
@@ -329,7 +313,7 @@ class Pivoter:
             hNodes = list(ego.label - (self.neighborhoods[pivot] | {pivot}))
             for i in range(len(hNodes)):
                 h_label = (ego.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
-                yield SCTnode2(h_label, hNodes[i], (p, h + 1), ((v,0), ego.hv_chn))
+                yield SCTnode2(h_label, hNodes[i], (p, h + 1), ((hNodes[i],0), ego.ph_chn))
 
 
         # initialize generator stack with "root" hold node
@@ -351,24 +335,53 @@ class Pivoter:
                 stack.pop()
 
         # Return the "process" results
-        return global_ec, global_counts, vertex_curv, vertex_counts
+        return global_counts, vertex_counts
 
-    def _aggregate(self, data) -> None:
+    def _aggregate(self, global_counts, vertex_counts) -> None:
         """Merges worker results back into the global state."""
 
-        # sketchy but it works
-        global_ec, global_counts, vertex_curv, vertex_counts = data 
-    
-        self.global_ec += global_ec
-    
         for k, c in enumerate(global_counts):
             self.global_counts[k] += c
 
         if self.get_curv:
-            for v, c in enumerate(vertex_curv):
-                self.vertex_curv[v] += c
-
             for v, row in enumerate(vertex_counts):
                 for k, c in enumerate(row):
                     self.vertex_counts[v][k] += c
 
+
+    @property
+    def global_ec(self) -> int:
+        """
+        Computes the global Euler Characteristic on the fly.
+        Formula: sum of (-1)^(k-1) * count_k
+        """
+        if not self.global_counts:
+            return None
+            
+        ec = 0
+        for k, count in enumerate(self.global_counts):
+            if k == 0 or count == 0:
+                continue
+            ec += ((-1) ** (k - 1)) * count
+            
+        return ec
+
+    @property
+    def vertex_curv(self) -> list[float] | None:
+        """
+        Computes vertex curvatures on the fly from vertex_counts.
+        Formula: sum of (-1)^(k-1) * (count_k / k)
+        """
+        if not self.vertex_counts:
+            return None
+            
+        curvatures = []
+        for v_counts in self.vertex_counts:
+            curv = 0.0
+            for k, count in enumerate(v_counts):
+                if k == 0 or count == 0:
+                    continue
+                curv += ((-1) ** (k - 1)) * (count / k)
+            curvatures.append(curv)
+            
+        return curvatures
