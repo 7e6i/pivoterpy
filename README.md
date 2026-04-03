@@ -19,17 +19,21 @@ G.count()
 G.clique_counts
 ```
 
-## timings
-- Tested on complete graphs with $k$ nodes.
-- **CPU**: AMD Ryzen 5 3600, **RAM**: 2x16GB DDR4-3200 CL16
+## benchmarks
+- **CPU**: AMD Ryzen 5 3600, **RAM**: 32GB DDR4-3200MHz CL16
+- Tested on complete graphs with n nodes.
+- All times shown are the average of 10 runs (in **seconds**).
+- Setup refers to initialization time (nbhds, degen. ordering, etc)
 
-**Results**
+---
 
-| $k$  | 100  | 200  | 300  | 400  | 500  | 600  | 700  | 800  | 900  | 1000 |
-| ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| time | 0:00 | 0:02 | 0:15 | 1:01 | 0:29 | 1:02 | 1:53 | 2:06 | 3:17 | 4:51 |
-| procs |      |      |      |      | 4    | 4    | 4    | 8    | 8    | 8    |
-
+|   n   | setup | no mp | 4 procs | 8 procs |
+| ----- | ----- | ----- | ------- | ------- |
+| 300   | 0.02  |       |         |         |
+| 600   | 0.09  | 0:04  |         |         |
+| 900   | 0.22  | 0:13  | 0:04    |         |
+| 1200  | 0.36  |       | 0:11    | 0:11    |
+| 1500  | 0.69  |       |         | 0:22    |
 
 
 # Documentation
