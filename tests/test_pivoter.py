@@ -15,18 +15,23 @@ def timer():
 
     times = []
 
-    for _ in range(10):
+    for _ in range(1):
 
         t0 = time()
-        #G = complete_graph(100)
-        G = erodos_reyni(1000, 0.1)
+        G = complete_graph(3)
+        #G = erodos_reyni(1000, 0.1)
         
         pivoter = Pivoter.from_adj_matrix(G)
-        pivoter.count()
+        pivoter.count(get_curv=True)
 
         t = time() - t0
         times.append(t)
         print(f'Trial {_+1} took {t:.4f} seconds')
+
+        print(pivoter.ec)
+        print(pivoter.clique_counts)
+        print(pivoter.curvatures)
+        print(pivoter.vertex_clique_counts)
 
     print(f'Mean {sum(times)/len(times):.4f}')
 
