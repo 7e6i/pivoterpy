@@ -1,36 +1,12 @@
 from math import comb
 from multiprocessing import Pool
-import copy
-
-
-import sys
-sys.setrecursionlimit(10000) # just in case
-
 from collections.abc import Sequence
-from typing import Literal
+
 type Numeric = int | float | bool
 type AdjMatrix = Sequence[Sequence[Numeric]]
 
 
-
 class SCTnode:
-    def __init__(self, label, ph_cnt, ph_v, v, call_type="h"):
-        self.label = label
-        p,h = ph_cnt
-        self.ph_v = copy.deepcopy(ph_v)
-        self.v = v
-        if call_type == "p":
-          self.ph_cnt = (p+1, h)
-          self.ph_v[0] += [v]
-        elif call_type == "h":
-          self.ph_cnt = (p, h+1)
-          self.ph_v[1] += [v]
-
-    def __repr__(self):
-        return f"SCT{[int(i) for i in self.label]} {str(self.ph_cnt)}"
-
-
-class SCTnode2:
     def __init__(self, label, v, ph_cnt, ph_chn):
         self.label = label
         self.v = v
@@ -38,7 +14,6 @@ class SCTnode2:
         self.ph_cnt = ph_cnt # (pivot nodes, hold nodes)
 
         self.ph_chn = ph_chn # ((node, edge), parent_chain)
-
 
 
 class Pivoter:
@@ -333,17 +308,17 @@ class Pivoter:
             # find the best pivot
             pivot = self._choose_pivot(ego.label) 
             p_label = ego.label & self.neighborhoods[pivot]
-            yield SCTnode2(p_label, pivot, (p + 1, h), ((pivot,1), ego.ph_chn))
+            yield SCTnode(p_label, pivot, (p + 1, h), ((pivot,1), ego.ph_chn))
 
             # loop through the holds
             hNodes = list(ego.label - (self.neighborhoods[pivot] | {pivot}))
             for i in range(len(hNodes)):
                 h_label = (ego.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
-                yield SCTnode2(h_label, hNodes[i], (p, h + 1), ((hNodes[i],0), ego.ph_chn))
+                yield SCTnode(h_label, hNodes[i], (p, h + 1), ((hNodes[i],0), ego.ph_chn))
 
 
         # initialize generator stack with "root" hold node
-        root_node = SCTnode2(self.degen_order_nbhds[v], v, (0, 1), ((v,0), None))
+        root_node = SCTnode(self.degen_order_nbhds[v], v, (0, 1), ((v,0), None))
         stack = [child_generator(root_node)]
 
         # classic DFS
