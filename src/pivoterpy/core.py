@@ -7,6 +7,7 @@ import sys
 sys.setrecursionlimit(10000) # just in case
 
 from collections.abc import Sequence
+from typing import Literal
 type Numeric = int | float | bool
 type AdjMatrix = Sequence[Sequence[Numeric]]
 
@@ -29,6 +30,17 @@ class SCTnode:
         return f"SCT{[int(i) for i in self.label]} {str(self.ph_cnt)}"
 
 
+class SCTnode2:
+    def __init__(self, label, v, ph_cnt, ph_chn):
+        self.label = label
+        self.v = v
+
+        self.ph_cnt = ph_cnt # (pivot nodes, hold nodes)
+
+        self.ph_chn = ph_chn # ((node, edge), parent_chain)
+
+
+
 class Pivoter:
     '''
     Initialize pivoter object
@@ -42,6 +54,10 @@ class Pivoter:
         self.n = n
         self.m = m
         self.edges = edges
+
+        self._setup()
+        self._degeneracy_ordering()
+        self._degeneracy_neighborhoods()
 
     @classmethod
     def from_adj_matrix(cls, array: AdjMatrix) -> 'Pivoter':
@@ -170,10 +186,6 @@ class Pivoter:
     '''
     helper functions
     '''
-    def _count_clique_setup(self):
-        self._setup()
-        self._degeneracy_ordering()
-        self._degeneracy_neighborhoods()
 
     def _trim_counts(self):
         for i in range(self.n, -1, -1):
@@ -190,171 +202,173 @@ class Pivoter:
             self.vertex_clique_counts = [self.vertex_clique_counts[v][1:max_idx+1] for v in range(self.n)]
 
     def _choose_pivot(self, S):
-        pivot, max_nbdh = None, -1
+        pivot = None
+        max_nbdh = -1
         for v in S:
             nbhd = self.neighborhoods[v]
             size = len(nbhd & S)
-            if size > max_nbdh: max_nbdh, pivot = size, v
+            if size > max_nbdh: 
+                max_nbdh = size
+                pivot = v
         return pivot
+    
+    def _unpack_chain(self, chain_tuple) -> tuple[list[int], list[int]]:
+        """
+        Flattens a single tuple chain into a list of vertices.
+        """
+        if chain_tuple is None:
+            return []
+            
+        pivot_list = []
+        hold_list = []
+        current = chain_tuple
+        
+        while current is not None:
+            vertex, parent_chain = current
+            v, edge = vertex
 
+            if edge == 1:
+                pivot_list.append(v)
+            elif edge == 0:
+                pivot_list.append(v)
 
-    '''
-    wrapper to encompass count_cliques and count_cliques_mp
-    '''
-    def count(self, procs: int = 0, get_curv: bool = False):
+            current = parent_chain
+            
+        return pivot_list, hold_list
+
+    """
+    Main entry point. 
+    Handles both parallel and sequential logic with zero code duplication.
+    """
+    def count(
+            self, 
+            procs: int = 0, 
+            get_curv: bool = False,
+        ):
+
         assert isinstance(procs, int) and procs >= -1, "Processes must be a non-negative integer"
+        assert get_curv in [True, False], "get_curv must be a boolean"
+  
         self.procs = procs
         self.get_curv = get_curv
 
-        if procs == 0:
-            self.count_cliques(get_curv)
-
-        elif procs >= 1:
-            self.count_cliques_mp(get_curv, procs)
-
-
-    '''
-    1 process recursive implementation
-    - helpful to learn how the algorithm works
-    - good starting point to implement node/edge specific counts
-    '''
-    def count_cliques(self, get_curv: bool):
-        self._count_clique_setup()
-        self.get_curv = get_curv
-
-        self.ec = 0
-        self.clique_counts = [0 for _ in range(self.n+1)]
-        if self.get_curv:
-          self.vertex_clique_counts = [[0 for _ in range(self.n+1)] for _ in range(self.n)]
-          self.curvatures = [0 for _ in range(self.n)]
-
-        # loop through nodes
-        for v in range(self.n):
-            node = SCTnode(label=self.degen_order_nbhds[v], ph_cnt = (0,0), ph_v = [[], []], v = v)
-            self._count_cliques_rec(node)
-
-        self._trim_counts()
-
-    def _count_cliques_rec(self, parent):
-        # if parent.label is empty, update self.clique_counts, return
-        if not parent.label:
-            p,h = parent.ph_cnt
-            pv,hv = parent.ph_v
-            for i in range(0, p+1):
-                ncr = comb(p, i)
-
-                self.clique_counts[h+i] += ncr
-                self.ec += pow(-1, h+i+1) * ncr
-
-                if self.get_curv:
-                    for v in hv:
-                        self.vertex_clique_counts[v][h+i] += ncr
-                        self.curvatures[v] += pow(-1, h+i+1) * ncr / (h+i)
-            if self.get_curv:
-                for v in pv:
-                    for i in range(0, p):
-                        ncr = comb(p-1, i)
-                        self.vertex_clique_counts[v][h+i+1] += ncr
-                        self.curvatures[v] += pow(-1, h+i+2) * ncr / (h+i+1)
-            return
-
-        # find pivot and recurse
-        pivot = self._choose_pivot(parent.label)
-        label = parent.label & self.neighborhoods[pivot]
-        pNode = SCTnode(label, parent.ph_cnt, parent.ph_v, pivot, call_type="p")
-        self._count_cliques_rec(pNode)
-
-        # loop through hold nodes and recurse
-        hNodes = list(parent.label - (self.neighborhoods[pivot] | {pivot}))
-        for i in range(len(hNodes)):
-            label = (parent.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
-            hNode = SCTnode(label, parent.ph_cnt, parent.ph_v, hNodes[i])
-            self._count_cliques_rec(hNode)
+        self.global_ec = 0
+        self.global_counts = [0] * (self.n+1)
+        self.vertex_curv = [0] * self.n if get_curv else None
+        self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if get_curv else None
 
 
-    '''
-    parallelized implementation of count_cliques
-    '''
-    def count_cliques_mp(self, get_curv = False, procs = 1):
-        self._count_clique_setup()
-        self.get_curv = get_curv
+        ### begin counting
+        roots = range(self.n)
 
-        self.ec = 0
-        self.clique_counts = [0 for _ in range(self.n+1)]
-        if self.get_curv:
-          self.vertex_clique_counts = [[0 for _ in range(self.n+1)] for _ in range(self.n)]
-          self.curvatures = [0 for _ in range(self.n)]
-        nodes = [SCTnode(self.degen_order_nbhds[v], (0,0), [[], []], v) for v in range(self.n)]
+        if procs <= 1:
+            # Sequential execution
+            for v in roots:
+                data = self._count_from_root(v)
+                self._aggregate(data)
+        else:
+            # Parallel execution
+            with Pool(processes=procs) as pool:
+                # imap_unordered is faster than map because it yields results 
+                # immediately as processes finish, rather than waiting for them all to complete in order.
+                for data in pool.imap_unordered(self._count_from_root, roots):
+                    self._aggregate(data)
 
-        with Pool(processes=procs) as pool:
-            results = pool.map(self._cnt_clq_mp_wrap, nodes)
 
-        for r in results:
-            if self.get_curv:
-                ec, counts, curv, v_counts = r
-            else:
-                ec, counts = r
-            self.ec += ec
 
-            for i in range(self.n+1):
-                self.clique_counts[i] += counts[i]
+    def _count_from_root(self, v: int) -> tuple[int, list[int]]:
+        """
+        The MAP phase. 
+        Runs the exact same DFS, but isolated to a single root node.
+        """
+        # 1. Isolate the state. (We use a list for EC to allow mutation inside the closure)
+        global_ec = 0
+        global_counts = [0] * (self.n+1)
 
-            if self.get_curv:
-                for v in range(self.n):
-                    self.curvatures[v] += curv[v]
-                    for i in range(self.n+1):
-                        self.vertex_clique_counts[v][i] += v_counts[v][i]
+        vertex_curv = [0] * self.n if self.get_curv else None
+        vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
 
-        self._trim_counts()
-
-    # needed to keep track of clique frequencies
-    # takes advantage of multiproc copy on write rule when spawning subprocesses
-    def _cnt_clq_mp_wrap(self, parent):
-        self.clique_counts = [0 for _ in range(self.n+1)]
-        self.ec = 0
-        if self.get_curv:
-            self.vertex_clique_counts = [[0 for _ in range(self.n+1)] for _ in range(self.n)]
-            self.curvatures = [0 for _ in range(self.n)]
-
-        self._cnt_clq_mp_rec(parent)
-        if self.get_curv:
-            return self.ec, self.clique_counts, self.curvatures, self.vertex_clique_counts
-        
-        return self.ec, self.clique_counts
-
-    def _cnt_clq_mp_rec(self, parent):
-        # if parent.label is empty, update self.clique_counts, return
-        if not parent.label:
-            p,h = parent.ph_cnt
-            pv,hv = parent.ph_v
-            for i in range(0, p+1):
-                ncr = comb(p, i)
-
-                self.clique_counts[h+i] += ncr
-                self.ec += pow(-1, h+i+1) * ncr
-
-                if self.get_curv:
-                    for v in hv:
-                        self.vertex_clique_counts[v][h+i] += ncr
-                        self.curvatures[v] += pow(-1, h+i+1) * ncr / (h+i)
+        def child_generator(ego):
+            """Identical generator, but updates local state."""
+            nonlocal global_ec # allows assignment inside the closure
+            p, h = ego.ph_cnt
             
-            if self.get_curv:
-                for v in pv:
+            # reached a leaf node
+            if not ego.label:
+                if self.get_curv:
+                    pv, hv = self._unpack_chain(ego.ph_chn)
+
+                # from the paper
+                for i in range(0, p + 1):
+                    ncr = comb(p, i)
+                    global_ec += pow(-1, h+i+1) * ncr
+                    global_counts[h+i] += ncr
+
+                    # vertex counts
+                    if self.get_curv:   
+                        for v in hv:
+                            vertex_curv[v] += pow(-1, h+i+1) * ncr / (h+i)
+                            vertex_counts[v][h+i] += ncr
+
+                # vertex counts
+                if self.get_curv:
                     for i in range(0, p):
-                        ncr = comb(p-1, i)
-                        self.vertex_clique_counts[v][h+i+1] += ncr
-                        self.curvatures[v] += pow(-1, h+i+2) * ncr / (h+i+1)
-            return
+                        ncr = comb(p - 1, i)
+                        for v in pv:
+                            vertex_curv[v] += pow(-1, h+i+2) * ncr / (h+i+1)
+                            vertex_counts[v][h+i+1] += ncr
 
-        # find pivot and recurse
-        pivot = self._choose_pivot(parent.label)
-        label = parent.label & self.neighborhoods[pivot]
-        pNode = SCTnode(label, parent.ph_cnt, parent.ph_v, pivot, call_type="p")
-        self._cnt_clq_mp_rec(pNode)
+                return 
 
-        # loop through hold nodes and recurse
-        hNodes = list(parent.label - (self.neighborhoods[pivot] | {pivot}))
-        for i in range(len(hNodes)):
-            label = (parent.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
-            hNode = SCTnode(label, parent.ph_cnt, parent.ph_v, hNodes[i])
-            self._cnt_clq_mp_rec(hNode)
+            # find the best pivot
+            pivot = self._choose_pivot(ego.label) 
+            p_label = ego.label & self.neighborhoods[pivot]
+            yield SCTnode2(p_label, pivot, (p + 1, h), ((pivot,1), ego.ph_chn))
+
+            # loop through the holds
+            hNodes = list(ego.label - (self.neighborhoods[pivot] | {pivot}))
+            for i in range(len(hNodes)):
+                h_label = (ego.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
+                yield SCTnode2(h_label, hNodes[i], (p, h + 1), ((v,0), ego.hv_chn))
+
+
+        # initialize generator stack with "root" hold node
+        root_node = SCTnode2(self.degen_order_nbhds[v], v, (0, 1), ((v,0), None))
+        stack = [child_generator(root_node)]
+
+        # classic DFS
+        while stack:
+            # peek at top generator in stack
+            active_gen = stack[-1]
+
+            # try to get the next item from the generator
+            # if successful, 
+            # if out of items, pop
+            try:
+                next_node = next(active_gen)
+                stack.append(child_generator(next_node))
+            except StopIteration:
+                stack.pop()
+
+        # Return the "process" results
+        return global_ec, global_counts, vertex_curv, vertex_counts
+
+    def _aggregate(self, data) -> None:
+        """Merges worker results back into the global state."""
+
+        # sketchy but it works
+        global_ec, global_counts, vertex_curv, vertex_counts = data 
+    
+        self.global_ec += global_ec
+    
+        for k, c in enumerate(global_counts):
+            self.global_counts[k] += c
+
+        if self.get_curv:
+            for v, c in enumerate(vertex_curv):
+                self.vertex_curv[v] += c
+
+            for v, row in enumerate(vertex_counts):
+                for k, c in enumerate(row):
+                    self.vertex_counts[v][k] += c
+
