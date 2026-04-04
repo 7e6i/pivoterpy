@@ -261,23 +261,21 @@ class Pivoter:
         self.global_counts = [0] * (self.n+1)
         self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if get_curv else None
 
-        self.max_depth = 0
-
         ### begin counting
         roots = range(self.n)
 
         if procs <= 0:
             # Sequential execution
             for v in roots:
-                g_counts, v_counts, worker_depth = self._count_from_root(v)
-                self._aggregate(g_counts, v_counts, worker_depth)
+                g_counts, v_counts = self._count_from_root(v)
+                self._aggregate(g_counts, v_counts)
         else:
             # Parallel execution
             with Pool(processes=procs) as pool:
                 chunk = max(1, len(roots)// (procs * 4))
            
-                for g_counts, v_counts, worker_depth in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
-                    self._aggregate(g_counts, v_counts, worker_depth)
+                for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
+                    self._aggregate(g_counts, v_counts)
 
         self._trim_trailing_zeros()
 
@@ -285,43 +283,29 @@ class Pivoter:
 
     def _count_from_root(self, v: int) -> tuple[int, list[int]]:
         global_counts = [0] * (self.n+1)
-        #vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
         vertex_counts = defaultdict(lambda: defaultdict(int)) if self.get_curv else None
-        max_depth = 0
 
         def child_generator(ego):
             """Identical generator, but updates local state."""
-            nonlocal max_depth
             p, h = ego.ph_cnt
             
             # reached a leaf node
             if not ego.label:
-                if self.get_curv:
-                    pv, hv = self._unpack_chain(ego.ph_chn)
-
-                if p+h > max_depth:
-                    max_depth = p + h
-
-                # from the paper
                 for i in range(0, p + 1):
                     ncr = comb(p, i)
                     global_counts[h+i] += ncr
 
-                    if self.get_curv: # vertex counts 
+                    # vertex counts
+                    if self.get_curv: 
+                        pv, hv = self._unpack_chain(ego.ph_chn)
+
                         for v in hv:
                             vertex_counts[v][h+i] += ncr
 
-                        # TODO suspicious - need to check this
                         if i > 0 and p > 0:
-                            ncr_p = (ncr * i) // p  # trick to avoid calling comb()
+                            ncr_p = (ncr * i) // p  # = comb(p-1, i-1)
                             for v in pv:
-                                vertex_counts[v][h + i] += ncr_p
-
-                # if self.get_curv: # vertex counts
-                #     for i in range(0, p):
-                #         ncr = comb(p - 1, i)
-                #         for v in pv:
-                #             vertex_counts[v][h+i+1] += ncr
+                                vertex_counts[v][h+i] += ncr_p
 
                 return 
 
@@ -367,9 +351,9 @@ class Pivoter:
 
         # Return the "process" results
         clean_v_counts = {k: dict(v) for k, v in vertex_counts.items()} if vertex_counts else None
-        return global_counts, clean_v_counts, max_depth
+        return global_counts, clean_v_counts
 
-    def _aggregate(self, global_counts, vertex_counts, worker_depth) -> None:
+    def _aggregate(self, global_counts, vertex_counts) -> None:
         """Merges worker results back into the global state."""
 
         for k, count in enumerate(global_counts):
@@ -380,7 +364,6 @@ class Pivoter:
                 for k, count in k_counts.items():
                     self.vertex_counts[v][k] += count
 
-        self.max_depth = max(self.max_depth, worker_depth)
 
 
     @property
