@@ -1,15 +1,18 @@
 from math import comb
 from multiprocessing import Pool
-from collections.abc import Sequence
+from collections import defaultdict
 
+from collections.abc import Sequence
 type Numeric = int | float | bool
 type AdjMatrix = Sequence[Sequence[Numeric]]
 
 
 class SCTnode:
-    def __init__(self, label, v, ph_cnt, ph_chn):
+    # notify the interpreter of all variables
+    __slots__ = ('label', 'ph_cnt', 'ph_chn')
+
+    def __init__(self, label, ph_cnt, ph_chn):
         self.label = label
-        self.v = v
 
         self.ph_cnt = ph_cnt # (pivot nodes, hold nodes)
 
@@ -30,9 +33,9 @@ class Pivoter:
         self.m = m
         self.edges = edges
 
-        self._setup()
+        self._neighborhoods()
         self._degeneracy_ordering()
-        self._degeneracy_neighborhoods()
+        self._degeneracy_nbhds()
 
     @classmethod
     def from_adj_matrix(cls, array: AdjMatrix) -> 'Pivoter':
@@ -88,7 +91,11 @@ class Pivoter:
         return cls(n=n, m=len(edges), edges=list(edges))
 
 
-    def _setup(self):
+    '''
+    setup functions
+    '''
+
+    def _neighborhoods(self):
         """calculate neighborhoods, degrees, and nodes by degree"""
 
         # neighborhood of nodes
@@ -153,7 +160,7 @@ class Pivoter:
         self.degen_order_by_node = L2
 
 
-    def _degeneracy_neighborhoods(self):
+    def _degeneracy_nbhds(self):
         degen_order_nbhds = [None] * self.n # arr[v] = N^+(v)
         ranks = self.degen_order_by_node
 
@@ -242,19 +249,17 @@ class Pivoter:
     def count(
             self, 
             procs: int = 0, 
-            get_curv: bool = False,
+            vertex: bool = False,
         ):
 
         assert isinstance(procs, int) and procs >= -1, "Processes must be a non-negative integer"
-        assert get_curv in [True, False], "get_curv must be a boolean"
+        assert vertex in [True, False], "vertex must be a boolean"
   
         self.procs = procs
-        self.get_curv = get_curv
+        self.get_curv = vertex
 
         self.global_counts = [0] * (self.n+1)
-        self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if get_curv else None
-
-        self.max_depth = 0
+        self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
 
         ### begin counting
         roots = range(self.n)
@@ -262,16 +267,15 @@ class Pivoter:
         if procs <= 0:
             # Sequential execution
             for v in roots:
-                g_counts, v_counts, worker_depth = self._count_from_root(v)
-                self._aggregate(g_counts, v_counts, worker_depth)
+                g_counts, v_counts = self._count_from_root(v)
+                self._aggregate(g_counts, v_counts)
         else:
             # Parallel execution
-            with Pool(processes=procs) as pool:
-                chunk = max(1, len(roots)// (procs * 4))
-                # imap_unordered is faster than map because it yields results 
-                # immediately as processes finish, rather than waiting for them all to complete in order.
-                for g_counts, v_counts, worker_depth in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
-                    self._aggregate(g_counts, v_counts, worker_depth)
+            with Pool(processes=self.procs) as pool:
+                chunk = max(1, len(roots)// (self.procs * 4))
+           
+                for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
+                    self._aggregate(g_counts, v_counts)
 
         self._trim_trailing_zeros()
 
@@ -279,53 +283,56 @@ class Pivoter:
 
     def _count_from_root(self, v: int) -> tuple[int, list[int]]:
         global_counts = [0] * (self.n+1)
-        vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
-        max_depth = 0
+        vertex_counts = defaultdict(lambda: defaultdict(int)) if self.get_curv else None
 
         def child_generator(ego):
             """Identical generator, but updates local state."""
-            nonlocal max_depth
             p, h = ego.ph_cnt
             
             # reached a leaf node
             if not ego.label:
-                if self.get_curv:
-                    pv, hv = self._unpack_chain(ego.ph_chn)
-
-                if p+h > max_depth:
-                    max_depth = p + h
-
-                # from the paper
                 for i in range(0, p + 1):
                     ncr = comb(p, i)
                     global_counts[h+i] += ncr
 
-                    if self.get_curv: # vertex counts 
+                    # vertex counts
+                    if self.get_curv: 
+                        pv, hv = self._unpack_chain(ego.ph_chn)
+
                         for v in hv:
                             vertex_counts[v][h+i] += ncr
 
-                if self.get_curv: # vertex counts
-                    for i in range(0, p):
-                        ncr = comb(p - 1, i)
-                        for v in pv:
-                            vertex_counts[v][h+i+1] += ncr
+                        if i > 0 and p > 0:
+                            ncr_p = (ncr * i) // p  # = comb(p-1, i-1)
+                            for v in pv:
+                                vertex_counts[v][h+i] += ncr_p
 
                 return 
 
             # find the best pivot
             pivot = self._choose_pivot(ego.label) 
             p_label = ego.label & self.neighborhoods[pivot]
-            yield SCTnode(p_label, pivot, (p + 1, h), ((pivot,1), ego.ph_chn))
+            p_chain = ((pivot, 1), ego.ph_chn) if self.get_curv else None
+            yield SCTnode(p_label, (p + 1, h), p_chain)
 
             # loop through the holds
-            hNodes = list(ego.label - (self.neighborhoods[pivot] | {pivot}))
-            for i in range(len(hNodes)):
-                h_label = (ego.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
-                yield SCTnode(h_label, hNodes[i], (p, h + 1), ((hNodes[i],0), ego.ph_chn))
+            # hNodes = list(ego.label - (self.neighborhoods[pivot] | {pivot}))
+            # for i in range(len(hNodes)):
+            #     h_label = (ego.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
+            #     yield SCTnode(h_label, hNodes[i], (p, h + 1), ((hNodes[i],0), ego.ph_chn))
+
+            h_labels = ego.label.difference(self.neighborhoods[pivot], {pivot})
+            excluded_holds = set()
+            for v in h_labels:
+                h_label = ego.label.intersection(self.neighborhoods[h]).difference(excluded_holds)                
+                h_chain = ((h, 0), ego.ph_chn) if self.get_curv else None
+                yield SCTnode(h_label, (p, h + 1), h_chain)
+                excluded_holds.add(v)
 
 
         # initialize generator stack with "root" hold node
-        root_node = SCTnode(self.degen_order_nbhds[v], v, (0, 1), ((v,0), None))
+        root_chain = ((v, 0), None) if self.get_curv else None
+        root_node = SCTnode(self.degen_order_nbhds[v], (0, 1), root_chain)
         stack = [child_generator(root_node)]
 
         # classic DFS
@@ -343,20 +350,20 @@ class Pivoter:
                 stack.pop()
 
         # Return the "process" results
-        return global_counts, vertex_counts, max_depth
+        clean_v_counts = {k: dict(v) for k, v in vertex_counts.items()} if vertex_counts else None
+        return global_counts, clean_v_counts
 
-    def _aggregate(self, global_counts, vertex_counts, worker_depth) -> None:
+    def _aggregate(self, global_counts, vertex_counts) -> None:
         """Merges worker results back into the global state."""
 
-        for k, c in enumerate(global_counts):
-            self.global_counts[k] += c
+        for k, count in enumerate(global_counts):
+            self.global_counts[k] += count
 
-        if self.get_curv:
-            for v, row in enumerate(vertex_counts):
-                for k, c in enumerate(row):
-                    self.vertex_counts[v][k] += c
+        if self.get_curv and vertex_counts:
+            for v, k_counts in vertex_counts.items():
+                for k, count in k_counts.items():
+                    self.vertex_counts[v][k] += count
 
-        self.max_depth = max(self.max_depth, worker_depth)
 
 
     @property
@@ -377,7 +384,7 @@ class Pivoter:
         return ec
 
     @property
-    def vertex_curv(self) -> list[float] | None:
+    def vertex_ec(self) -> list[float] | None:
         """
         Computes vertex curvatures on the fly from vertex_counts.
         Formula: sum of (-1)^(k-1) * (count_k / k)
@@ -409,8 +416,8 @@ class Pivoter:
     
     @property
     def curvatures(self) -> list[int]:
-        """Alias for vertex_curv."""
-        return self.vertex_curv
+        """Alias for vertex_ec."""
+        return self.vertex_ec
     
     @property
     def vertex_clique_counts(self) -> list[int]:
