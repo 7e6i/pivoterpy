@@ -249,17 +249,17 @@ class Pivoter:
     def count(
             self, 
             procs: int = 0, 
-            get_curv: bool = False,
+            vertex: bool = False,
         ):
 
         assert isinstance(procs, int) and procs >= -1, "Processes must be a non-negative integer"
-        assert get_curv in [True, False], "get_curv must be a boolean"
+        assert vertex in [True, False], "vertex must be a boolean"
   
         self.procs = procs
-        self.get_curv = get_curv
+        self.get_curv = vertex
 
         self.global_counts = [0] * (self.n+1)
-        self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if get_curv else None
+        self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
 
         ### begin counting
         roots = range(self.n)
@@ -271,8 +271,8 @@ class Pivoter:
                 self._aggregate(g_counts, v_counts)
         else:
             # Parallel execution
-            with Pool(processes=procs) as pool:
-                chunk = max(1, len(roots)// (procs * 4))
+            with Pool(processes=self.procs) as pool:
+                chunk = max(1, len(roots)// (self.procs * 4))
            
                 for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
                     self._aggregate(g_counts, v_counts)
@@ -384,7 +384,7 @@ class Pivoter:
         return ec
 
     @property
-    def vertex_curv(self) -> list[float] | None:
+    def vertex_ec(self) -> list[float] | None:
         """
         Computes vertex curvatures on the fly from vertex_counts.
         Formula: sum of (-1)^(k-1) * (count_k / k)
@@ -416,8 +416,8 @@ class Pivoter:
     
     @property
     def curvatures(self) -> list[int]:
-        """Alias for vertex_curv."""
-        return self.vertex_curv
+        """Alias for vertex_ec."""
+        return self.vertex_ec
     
     @property
     def vertex_clique_counts(self) -> list[int]:
