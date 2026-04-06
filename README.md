@@ -3,7 +3,7 @@ Parallelized pure Python implementation of the `Pivoter` clique counting algorit
 
 Based on <u>The Power of Pivoting for Exact Clique Counting</u> by *S. Jain*, *C. Seshadhri*.
 
->*The fasest clique counter this side of the Mississippi. - Sun Tzu*
+>*The greatest victory is that which requires no battle - Sun Tzu, The Art of War*
 
 ## quick start
 
@@ -47,7 +47,7 @@ Edges are created for entries > 0 (or True).
 G = Pivoter.from_adj_matrix(array)
 ```
 
-Requies a M x 2 edge matrix and the positive integer number of nodes $n$.
+Requires a M x 2 edge matrix and the positive integer number of nodes $n$.
 
 Note: all elements must be $(u,v)$ with $u,v\in\mathbb{Z}$ and $0\le u < v < n$.
 ```
@@ -71,20 +71,20 @@ G.degen_order_nbhds     # list of sets
 Multiprocessing is generally only beneficial for especially large or dense graphs.
 
 ```
-G.count(procs=4) # default is procs=0 (avoids mp.Pool)
-G.count(get_curv=True) # default is get_curv=False
+G.count(procs=4) # default is 0 (avoids mp.Pool)
+G.count(vertex=True) # default is False, finds vertex counts
 ```
 
-Results available after completion.
+Results available after completion:
 ```
 G.max_k         # max clique size
-G.global_ec     # G.ec
+G.global_ec     # G.ec (euler characteristic)
 G.global_counts # G.clique_counts
 ```
 
-With `get_curv` set to `True`.
+if `vertex` is True:
 ```
-G.vertex_curv   # G.curvatures
+G.vertex_ec   # G.curvatures
 G.vertex_counts # G.vertex_clique_counts
 ```
 
@@ -122,4 +122,4 @@ Large Sparse Real-World Graph](https://arxiv.org/pdf/1103.0318)
 
 - PyPivoter - Cython implementation by *rckormos*. ([code](https://github.com/rckormos/PyPivoter))
 
-- **pivoterpy** - pure Python implementation with parallelization!
+- **pivoterpy** - parallelized pure Python implementation!

@@ -18,19 +18,19 @@ def test_complete_graph():
     assert H.n == n
     assert H.m == n*(n-1) // 2
 
-    H.count(get_curv=True)
+    H.count(vertex=True)
 
     assert H.ec == H.global_ec == 1
 
     counts = [0]+[comb(n, i) for i in range(1, n+1)]
-    assert H.clique_counts == H.global_counts == counts
+    assert H.clique_counts == counts
 
     counts = [0] + [comb(n-1, i) for i in range(n)]
     for i in range(n):
-        assert H.vertex_counts[i] == H.vertex_clique_counts[i] == counts
+        assert H.vertex_clique_counts[i] == counts
     
     tol = 1e-6
-    assert abs(H.ec - sum(H.curvatures)) < tol and abs(H.ec - sum(H.vertex_curv)) < tol
+    assert abs(H.ec - sum(H.curvatures)) < tol
 
 
 def test_gnp():
@@ -40,13 +40,13 @@ def test_gnp():
     H = Pivoter.from_adj_matrix(G)
     assert H.n == n
     
-    H.count(get_curv=True)
+    H.count(vertex=True)
     assert H.ec == H.global_ec
 
     # TODO idk, K-S test for binomial distribution?
 
     tol = 1e-6
-    assert abs(H.ec - sum(H.curvatures)) < tol and abs(H.ec - sum(H.vertex_curv)) < tol
+    assert abs(H.ec - sum(H.curvatures)) < tol
 
 
 
