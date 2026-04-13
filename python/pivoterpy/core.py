@@ -40,6 +40,7 @@ class Pivoter:
 
         self.edges = edges
         self.n = n
+        self.m = len(edges)
 
         self._neighborhoods()
         self._degeneracy_ordering()
@@ -287,6 +288,10 @@ class Pivoter:
         self.use_rust = rust
         self.procs = procs
 
+        if self.use_rust and self.get_curv:
+            warnings.warn("Rust vertex counts are not available at this time. Defaulting to Python.")
+            self.use_rust = False
+
 
         if self.use_rust:
 
@@ -303,7 +308,7 @@ class Pivoter:
                 self.vertex_counts = None # TODO
 
             except ImportError:
-                warnings.warn("Rust backend not found. Using Python as fallback.")
+                warnings.warn("Rust backend not found. Defaulting to Python.")
                 self.use_rust = False # fallback
 
 
