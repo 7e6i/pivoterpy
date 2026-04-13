@@ -11,18 +11,31 @@ requires-python = ">=3.8"
 dependencies = []
 
 keywords = [
-    "graph theory", 
-    "clique counting", 
+    "graph-theory", 
+    "clique-counting",
+    "degeneracy",
+    "algorithms",
+    "euler-characteristic",
+    "curvatures",
+    "rust"
+]
+
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
 ]
 
 [project.urls]
-source = "https://github.com/7e6i/pivoterpy"
+source = "https://github.com/7e6i/Pivoter"
 
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
-    "maturin>=1.0,<2.0",  # Added here!
+    "maturin>=1.0,<2.0",
 ]
 
 
