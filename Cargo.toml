@@ -1,0 +1,15 @@
+[package]
+name = "pivoterpy"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+name = "_rust_engine" 
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28.3", features = ["extension-module", "num-bigint"] }
+rayon = "1.8"
+fixedbitset = "0.4"
+num-bigint = "0.4"
+num-traits = "0.2"
