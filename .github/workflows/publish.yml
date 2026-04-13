@@ -1,33 +1,80 @@
-name: Publish to PyPI
+name: Build and Publish to PyPI
 
 on:
   release:
-    types: [published]  # This makes it run ONLY when you publish a GitHub Release
+    types: [published]
 
 jobs:
-  pypi-publish:
-    name: Build and upload to PyPI
+  # 1. BUILD FOR LINUX
+  linux:
     runs-on: ubuntu-latest
-    environment: pypi
-    
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
         with:
-          python-version: "3.x"
+          manylinux: auto
+          command: build
+          args: --release --out dist -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux
+          path: dist
 
-      - name: Install build tools
-        run: python -m pip install build
+  # 2. BUILD FOR WINDOWS
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows
+          path: dist
 
-      - name: Build the package (tar.gz and wheel)
-        run: python -m build
+  # 3. BUILD FOR MAC (Intel & Apple Silicon)
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --target universal2-apple-darwin -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos
+          path: dist
 
+  # 4. BUILD THE SOURCE CODE FALLBACK
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  # 5. PUBLISH ALL FILES TO PYPI
+  pypi-publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [linux, windows, macos, sdist]
+    environment: pypi
+    permissions:
+      id-token: write 
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

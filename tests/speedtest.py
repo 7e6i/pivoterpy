@@ -18,17 +18,17 @@ def timer():
 
     for _ in range(10):
 
-        G = complete_graph(1000)
-        #G = erodos_reyni(3000, .03)
+        #G = complete_graph(800)
+        G = erodos_reyni(300, .5)
 
         t0 = time()
-        H = Pivoter.from_adj_matrix(G)
+        H = Pivoter.from_adj_matrix(G, backend='rs')
         t = time() - t0
         inits.append(t)
         print(f'{t:.4f}s,', end=' ')
 
         t0 = time()
-        H.count(vertex=False)
+        H.count(procs=8)
         t = time() - t0
         times.append(t)
         print(f'{_+1}: {t:.4f}s')
@@ -36,7 +36,7 @@ def timer():
 
     print(f'Inits {sum(inits)/len(inits):.2f}s')
     print(f'Counts {sum(times)/len(times):.2f}s')
-    print(H.ec, H.max_k)
+    print(H.ec)
     #print(H.clique_counts)
 
 

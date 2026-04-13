@@ -1,19 +1,32 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "pivoterpy"
-version = "1.0.0"
-description = "Parallelized pure Python implementation of the Pivoter clique counting algorithm."
+version = "1.1.0"
+description = "Parallelized Python (and Rust) implementation of the Pivoter clique counting algorithm."
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8" 
 dependencies = []
 
-[project.optional-dependencies]
-test = [
-    "pytest>=7.0",
+keywords = [
+    "graph theory", 
+    "clique counting", 
 ]
+
+[project.urls]
+source = "https://github.com/7e6i/pivoterpy"
+
+
+[project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "maturin>=1.0,<2.0",  # Added here!
 ]
+
+
+[tool.maturin]
+python-source = "python"
+module-name = "pivoterpy._rust_engine"
+features = ["pyo3/extension-module"]

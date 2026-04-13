@@ -2,10 +2,6 @@ from math import comb
 from multiprocessing import Pool
 from collections import defaultdict
 
-from collections.abc import Sequence
-type Numeric = int | float | bool
-type AdjMatrix = Sequence[Sequence[Numeric]]
-
 
 class SCTnode:
     # notify the interpreter of all variables
@@ -19,76 +15,17 @@ class SCTnode:
         self.ph_chn = ph_chn # ((node, edge), parent_chain)
 
 
-class Pivoter:
-    '''
-    Initialize pivoter object
-    - mode=adj: n x n adjacency matrix, only reads upper triangle
-    - mode=edge: m x 2 array of edges (u,v) where u<v, u in {0,...,n-1}
-    '''
+class _PythonPivoter:
 
-    def __init__(self, n: int, m: int, edges: list[tuple[int, int]]):
+    def __init__(self, edges: list[tuple[int, int]], n: int):
         """Pivoter constructor"""
 
-        self.n = n
-        self.m = m
         self.edges = edges
+        self.n = n
 
         self._neighborhoods()
         self._degeneracy_ordering()
         self._degeneracy_nbhds()
-
-    @classmethod
-    def from_adj_matrix(cls, array: AdjMatrix) -> 'Pivoter':
-        """
-        Creates a Pivoter instance from the upper triangle of a square adjacency matrix.
-
-        Args:
-            arr: A 2D list representing an n x n square adjacency matrix 
-                 where values > 0 indicate an edge.
-
-        Returns:
-            A populated Pivoter object containing the node count, 
-            edge count, and a list of edge tuples.
-
-        Raises:
-            AssertionError: If the provided matrix is not square.
-        """
-
-        assert len(array) == len(array[0]), "Adjacency matrix must be square"
-
-        n = len(array)
-        edges = []
-        for i in range(n):
-            for j in range(i+1, n):
-                if array[i][j] > 0:
-                    edges.append((i,j))
-
-        return cls(n=n, m=len(edges), edges=edges)
-
-    @classmethod
-    def from_edge_list(cls, array: list[tuple[int, int]], n: int) -> 'Pivoter':
-        """
-        Creates a Pivoter instance from a list of (u, v) tuples representing edges.
-
-        Args:
-            arr: A 2D list representing an m x 2 list of (u, v) edges.
-            n: The number of nodes in the graph.
-
-        Returns:
-            Pivoter: A populated Pivoter object.
-
-        Raises:
-            AssertionError: If the provided list is not a list of tuples.
-            AssertionError: If 0 <= u < v < n is not met.
-        """
-
-        edges = set()
-        for u, v in array:
-            assert isinstance(u, int) and isinstance(v, int), "Node indices must be integers"
-            assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
-            edges.add((u,v))
-        
-        return cls(n=n, m=len(edges), edges=list(edges))
 
 
     '''
@@ -248,13 +185,10 @@ class Pivoter:
     """
     def count(
             self, 
-            procs: int = 0, 
-            vertex: bool = False,
+            vertex: bool,
+            procs: int, 
         ):
 
-        assert isinstance(procs, int) and procs >= -1, "Processes must be a non-negative integer"
-        assert vertex in [True, False], "vertex must be a boolean"
-  
         self.procs = procs
         self.get_curv = vertex
 
@@ -264,7 +198,7 @@ class Pivoter:
         ### begin counting
         roots = range(self.n)
 
-        if procs <= 0:
+        if procs is None:
             # Sequential execution
             for v in roots:
                 g_counts, v_counts = self._count_from_root(v)
