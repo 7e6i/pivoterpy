@@ -1,5 +1,5 @@
 # tests/test_pivoter.py
-from pivoterpy import Pivoter
+from python.pivoterpy import Pivoter
 
 from random import random
 from math import comb

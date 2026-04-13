@@ -1,11 +1,12 @@
+# python/pivoterpy/core.py
+
 from math import comb
 from multiprocessing import Pool
 from collections import defaultdict
 
+import warnings
 from collections.abc import Sequence
 type Numeric = int | float | bool
-type AdjMatrix = Sequence[Sequence[Numeric]]
-
 
 class SCTnode:
     # notify the interpreter of all variables
@@ -20,25 +21,37 @@ class SCTnode:
 
 
 class Pivoter:
-    '''
-    Initialize pivoter object
-    - mode=adj: n x n adjacency matrix, only reads upper triangle
-    - mode=edge: m x 2 array of edges (u,v) where u<v, u in {0,...,n-1}
-    '''
 
-    def __init__(self, n: int, m: int, edges: list[tuple[int, int]]):
-        """Pivoter constructor"""
+# ██ ███    ██ ██ ████████ 
+# ██ ████   ██ ██    ██    
+# ██ ██ ██  ██ ██    ██    
+# ██ ██  ██ ██ ██    ██    
+# ██ ██   ████ ██    ██    
+                         
 
-        self.n = n
-        self.m = m
+    """
+    The main API interface. Routes computations to the optimal backend.
+    """
+    def __init__(
+        self, 
+        edges: list[tuple[int, int]], 
+        n: int,
+    ):
+
         self.edges = edges
+        self.n = n
 
         self._neighborhoods()
         self._degeneracy_ordering()
         self._degeneracy_nbhds()
 
+
     @classmethod
-    def from_adj_matrix(cls, array: AdjMatrix) -> 'Pivoter':
+    def from_adj_matrix(
+        cls, 
+        array:  Sequence[Sequence[Numeric]], 
+    ) -> 'Pivoter':
+
         """
         Creates a Pivoter instance from the upper triangle of a square adjacency matrix.
 
@@ -63,10 +76,15 @@ class Pivoter:
                 if array[i][j] > 0:
                     edges.append((i,j))
 
-        return cls(n=n, m=len(edges), edges=edges)
+        return cls(edges=edges, n=n)
 
     @classmethod
-    def from_edge_list(cls, array: list[tuple[int, int]], n: int) -> 'Pivoter':
+    def from_edge_list(
+        cls, 
+        array: list[tuple[int, int]], 
+        n: int, 
+    ) -> 'Pivoter':
+        
         """
         Creates a Pivoter instance from a list of (u, v) tuples representing edges.
 
@@ -88,12 +106,15 @@ class Pivoter:
             assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
             edges.add((u,v))
         
-        return cls(n=n, m=len(edges), edges=list(edges))
+        return cls(edges=edges, n=n)
 
 
-    '''
-    setup functions
-    '''
+# ███████ ███████ ████████ ██    ██ ██████  
+# ██      ██         ██    ██    ██ ██   ██ 
+# ███████ █████      ██    ██    ██ ██████  
+#      ██ ██         ██    ██    ██ ██      
+# ███████ ███████    ██     ██████  ██      
+                                                                            
 
     def _neighborhoods(self):
         """calculate neighborhoods, degrees, and nodes by degree"""
@@ -176,9 +197,15 @@ class Pivoter:
 
         self.degen_order_nbhds = degen_order_nbhds
 
-    '''
-    helper functions
-    '''
+
+# ██   ██ ███████ ██      ██████  ███████ ██████  ███████ 
+# ██   ██ ██      ██      ██   ██ ██      ██   ██ ██      
+# ███████ █████   ██      ██████  █████   ██████  ███████ 
+# ██   ██ ██      ██      ██      ██      ██   ██      ██ 
+# ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████ 
+                                                        
+                                                        
+
 
     def _trim_trailing_zeros(self) -> None:
         """Removes trailing zeros from the counts arrays."""
@@ -242,21 +269,52 @@ class Pivoter:
             
         return pivot_list, hold_list
 
-    """
-    Main entry point. 
-    Handles both parallel and sequential logic with zero code duplication.
-    """
-    def count(
-            self, 
-            procs: int = 0, 
-            vertex: bool = False,
-        ):
 
-        assert isinstance(procs, int) and procs >= -1, "Processes must be a non-negative integer"
+#  ██████  ██████  ██    ██ ███    ██ ████████ 
+# ██      ██    ██ ██    ██ ████   ██    ██    
+# ██      ██    ██ ██    ██ ██ ██  ██    ██    
+# ██      ██    ██ ██    ██ ██  ██ ██    ██    
+#  ██████  ██████   ██████  ██   ████    ██    
+                                                                                
+
+    def count(self, vertex: bool = False, procs: int = None, rust: bool = False):
+
         assert vertex in [True, False], "vertex must be a boolean"
-  
-        self.procs = procs
+        assert procs is None or (isinstance(procs, int) and procs >= 1), "procs must be None (sequential) or an integer >= 1 (parallel)"
+        assert rust in [True, False], "rust must be a boolean"
+
         self.get_curv = vertex
+        self.use_rust = rust
+        self.procs = procs
+
+
+        if self.use_rust:
+
+            # multiproc a little different in Rust, can't not use rayon
+            n_procs = 1 if self.procs is None else self.procs   
+
+            try:
+                from . import _rust_engine
+
+                degen_order_nbhds = [list(nbhd) for nbhd in self.degen_order_nbhds]
+                
+                rust_worker = _rust_engine.RustPivoter(self.n, self.edges, self.node_by_degen_order, degen_order_nbhds)
+                self.global_counts = rust_worker.count(n_procs)
+                self.vertex_counts = None # TODO
+
+            except ImportError:
+                warnings.warn("Rust backend not found. Using Python as fallback.")
+                self.use_rust = False # fallback
+
+
+        if not self.use_rust:
+            self._py_count()
+
+
+        self._trim_trailing_zeros()
+
+
+    def _py_count(self):
 
         self.global_counts = [0] * (self.n+1)
         self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
@@ -264,7 +322,7 @@ class Pivoter:
         ### begin counting
         roots = range(self.n)
 
-        if procs <= 0:
+        if self.procs is None:
             # Sequential execution
             for v in roots:
                 g_counts, v_counts = self._count_from_root(v)
@@ -276,8 +334,6 @@ class Pivoter:
            
                 for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
                     self._aggregate(g_counts, v_counts)
-
-        self._trim_trailing_zeros()
 
 
 
@@ -315,11 +371,6 @@ class Pivoter:
             p_chain = ((pivot, 1), ego.ph_chn) if self.get_curv else None
             yield SCTnode(p_label, (p + 1, h), p_chain)
 
-            # loop through the holds
-            # hNodes = list(ego.label - (self.neighborhoods[pivot] | {pivot}))
-            # for i in range(len(hNodes)):
-            #     h_label = (ego.label & self.neighborhoods[hNodes[i]]) - set(hNodes[:i])
-            #     yield SCTnode(h_label, hNodes[i], (p, h + 1), ((hNodes[i],0), ego.ph_chn))
 
             h_labels = ego.label.difference(self.neighborhoods[pivot], {pivot})
             excluded_holds = set()
@@ -369,7 +420,7 @@ class Pivoter:
     @property
     def global_ec(self) -> int:
         """
-        Computes the global Euler Characteristic on the fly.
+        Computes the global Euler Characteristic as needed.
         Formula: sum of (-1)^(k-1) * count_k
         """
         if not self.global_counts:
@@ -386,7 +437,7 @@ class Pivoter:
     @property
     def vertex_ec(self) -> list[float] | None:
         """
-        Computes vertex curvatures on the fly from vertex_counts.
+        Computes vertex curvatures from vertex_counts as needed.
         Formula: sum of (-1)^(k-1) * (count_k / k)
         """
         if not self.vertex_counts:
