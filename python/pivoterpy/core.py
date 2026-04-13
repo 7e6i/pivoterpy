@@ -300,6 +300,7 @@ class Pivoter:
                 
                 rust_worker = _rust_engine.RustPivoter(self.n, self.edges, self.node_by_degen_order, degen_order_nbhds)
                 self.global_counts = rust_worker.count(n_procs)
+                self.vertex_counts = None # TODO
 
             except ImportError:
                 warnings.warn("Rust backend not found. Using Python as fallback.")
@@ -308,6 +309,9 @@ class Pivoter:
 
         if not self.use_rust:
             self._py_count()
+
+
+        self._trim_trailing_zeros()
 
 
     def _py_count(self):
@@ -330,8 +334,6 @@ class Pivoter:
            
                 for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
                     self._aggregate(g_counts, v_counts)
-
-        self._trim_trailing_zeros()
 
 
 
