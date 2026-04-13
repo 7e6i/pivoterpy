@@ -1,5 +1,5 @@
 # tests/test_pivoter.py
-from python.pivoterpy import Pivoter
+from pivoterpy import Pivoter
 
 from random import random
 from math import comb
@@ -49,8 +49,19 @@ def test_gnp():
     assert abs(H.ec - sum(H.curvatures)) < tol
 
 
+def test_rust():
+    n = 10
+    G = complete_graph(n)
+    H = Pivoter.from_adj_matrix(G)
+
+    H.count(vertex=True, rust=True)
+
+
+
 
 if __name__ == '__main__':
     test_complete_graph()
 
     test_gnp()
+
+    test_rust()
