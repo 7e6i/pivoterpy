@@ -29,7 +29,7 @@ jobs:
         with:
           command: build
           target: x64
-          args: --release --out dist -i 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+          args: --release --out dist
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows
