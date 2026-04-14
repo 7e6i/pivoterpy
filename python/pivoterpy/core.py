@@ -40,6 +40,7 @@ class Pivoter:
 
         self.edges = edges
         self.n = n
+        self.m = len(edges)
 
         self._neighborhoods()
         self._degeneracy_ordering()
@@ -70,11 +71,11 @@ class Pivoter:
         assert len(array) == len(array[0]), "Adjacency matrix must be square"
 
         n = len(array)
-        edges = []
+        edges = set()
         for i in range(n):
             for j in range(i+1, n):
                 if array[i][j] > 0:
-                    edges.append((i,j))
+                    edges.add((i,j))
 
         return cls(edges=edges, n=n)
 
@@ -82,30 +83,47 @@ class Pivoter:
     def from_edge_list(
         cls, 
         array: list[tuple[int, int]], 
-        n: int, 
+        n: int = None, 
     ) -> 'Pivoter':
         
         """
         Creates a Pivoter instance from a list of (u, v) tuples representing edges.
+        Ignores self-loops (u, u). Flips (v, u) with u < v to (u, v).
 
         Args:
             arr: A 2D list representing an m x 2 list of (u, v) edges.
-            n: The number of nodes in the graph.
+            n: The number of nodes in the graph (defaults to largest u + 1).
 
         Returns:
             Pivoter: A populated Pivoter object.
 
         Raises:
             AssertionError: If the provided list is not a list of tuples.
-            AssertionError: If 0 <= u < v < n is not met.
+            AssertionError: If 0 <= u, v < n is not met.
         """
 
+        assert n is None or (isinstance(n, int) and n>=1), "n must be None or positive integer"
+
+        largest_u = -1
         edges = set()
         for u, v in array:
             assert isinstance(u, int) and isinstance(v, int), "Node indices must be integers"
-            assert 0 <= u < n and 0 <= v < n and u < v, "Invalid edge"
-            edges.add((u,v))
+
+            if n is None:
+                assert 0 <= u and 0 <= v,  "Invalid edge"
+            else:
+                assert 0 <= u < n and 0 <= v < n, "Invalid edge"
+
+            norm = (u, v) if u < v else (v, u)
+            edges.add(norm)
+            largest_u = max(largest_u, u, v)
         
+        if n is None:
+            n = largest_u + 1
+
+        # check if no edges and n is None
+        assert len(edges) > 0 or n is not None, "No edges and no n provided"
+
         return cls(edges=edges, n=n)
 
 
@@ -137,16 +155,13 @@ class Pivoter:
         """degeneracy ordering of the nodes to optimize SCT construction"""
 
         # node v is at the rth position in the ordering: L1[r]=v, L2[v]=r
-        L1 = []
-        L2 = [None] * self.n
+        L1, L2 = [], [None] * self.n
 
         # temporary duplicate copies to avoid mutation
         by_degrees = [s.copy() for s in self.by_degrees]
         degrees = self.degrees[:]
 
-        rank = 0
-        k = 0
-        min_deg = 0
+        rank, k, min_deg = 0, 0, 0  
 
         # loop through nodes
         for _ in range(self.n):
@@ -210,24 +225,10 @@ class Pivoter:
     def _trim_trailing_zeros(self) -> None:
         """Removes trailing zeros from the counts arrays."""
         global_counts = self.global_counts
-        vertex_counts = self.vertex_counts
 
-        if not global_counts:
-            return
-        
         # Find the index of the largest clique size
-        max_k = 0
-        for k in range(1, len(global_counts)):
-            if global_counts[k] == 0:
-                max_k = k - 1
-                break
-        else:
-            max_k = len(global_counts) - 1 # if graph is complete
-        
-        self.max_k = max_k
-        self.global_counts = self.global_counts[:max_k + 1]
-        if vertex_counts:
-            self.vertex_counts = [row[:max_k + 1] for row in vertex_counts]
+        self.max_k = sum([c > 0 for c in global_counts])
+        self.global_counts = self.global_counts[:self.max_k + 1]
 
     def _choose_pivot(self, S):
         pivot = None
@@ -268,6 +269,15 @@ class Pivoter:
             current = parent_chain
             
         return pivot_list, hold_list
+    
+    
+    def _edge(self, u: int, v: int):
+        """
+        Returns normalized edge such that u < v
+        """
+
+        return (u, v) if u < v else (v, u)
+
 
 
 #  ██████  ██████  ██    ██ ███    ██ ████████ 
@@ -277,69 +287,86 @@ class Pivoter:
 #  ██████  ██████   ██████  ██   ████    ██    
                                                                                 
 
-    def count(self, vertex: bool = False, procs: int = None, rust: bool = False):
+    def count(
+            self, 
+            vertex: bool = False, 
+            edge: bool = False,
+            procs: int = None, 
+            rust: bool = False
+        ):
 
         assert vertex in [True, False], "vertex must be a boolean"
-        assert procs is None or (isinstance(procs, int) and procs >= 1), "procs must be None (sequential) or an integer >= 1 (parallel)"
+        assert edge in [True, False], "edge must be a boolean"
+        assert procs is None or (isinstance(procs, int) and procs >= 1), "procs must be None or an integer >= 1"
         assert rust in [True, False], "rust must be a boolean"
 
-        self.get_curv = vertex
+        self.count_vertex = vertex
+        self.count_edge = edge
         self.use_rust = rust
         self.procs = procs
 
+        self.global_counts = None
+        self.vertex_counts = None
+        self.edge_counts = None
+
+        # guard for actual implementations
+        if self.use_rust and self.count_edge:
+            warnings.warn("Edge counts are not available with Rust - defaulting to Python")
+            self.use_rust = False
+
 
         if self.use_rust:
-
-            # multiproc a little different in Rust, can't not use rayon
-            n_procs = 1 if self.procs is None else self.procs   
+            n_procs = 1 if self.procs is None else self.procs   # can't not use rayon
 
             try:
                 from . import _rust_engine
 
                 degen_order_nbhds = [list(nbhd) for nbhd in self.degen_order_nbhds]
-                
-                rust_worker = _rust_engine.RustPivoter(self.n, self.edges, self.node_by_degen_order, degen_order_nbhds)
-                self.global_counts = rust_worker.count(n_procs)
-                self.vertex_counts = None # TODO
+                rust_worker = _rust_engine.RustPivoter(self.n, list(self.edges), self.node_by_degen_order, degen_order_nbhds)
+
+                self.global_counts, self.vertex_counts = rust_worker.count(n_procs, self.count_vertex)
+
 
             except ImportError:
-                warnings.warn("Rust backend not found. Using Python as fallback.")
-                self.use_rust = False # fallback
+                warnings.warn("Rust backend not found - defaulting to Python")
+                self.use_rust = False
 
-
+        # check if had to use fallback 
         if not self.use_rust:
             self._py_count()
 
 
-        self._trim_trailing_zeros()
-
-
+        
     def _py_count(self):
+        self.global_counts  = [0] * (self.n+1)
+        self.vertex_counts = [[] for _ in range(self.n)] if self.count_vertex else None
+        self.edge_counts = {e: [] for e in self.edges} if self.count_edge else None
 
-        self.global_counts = [0] * (self.n+1)
-        self.vertex_counts = [[0] * (self.n+1) for _ in range(self.n)] if self.get_curv else None
-
-        ### begin counting
         roots = range(self.n)
 
         if self.procs is None:
             # Sequential execution
             for v in roots:
-                g_counts, v_counts = self._count_from_root(v)
-                self._aggregate(g_counts, v_counts)
+                g_counts, v_counts, e_counts = self._count_from_root(v)
+                self._aggregate(g_counts, v_counts, e_counts)
         else:
             # Parallel execution
             with Pool(processes=self.procs) as pool:
                 chunk = max(1, len(roots)// (self.procs * 4))
            
-                for g_counts, v_counts in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
-                    self._aggregate(g_counts, v_counts)
+                for g_counts, v_counts, e_counts in pool.imap_unordered(self._count_from_root, roots, chunksize=chunk):
+                    self._aggregate(g_counts, v_counts, e_counts)
+
+        self._trim_trailing_zeros()
 
 
 
     def _count_from_root(self, v: int) -> tuple[int, list[int]]:
-        global_counts = [0] * (self.n+1)
-        vertex_counts = defaultdict(lambda: defaultdict(int)) if self.get_curv else None
+        g_counts = [0] * (self.n+1)
+        v_counts = defaultdict(lambda: defaultdict(int)) if self.count_vertex else None
+        e_counts = defaultdict(lambda: defaultdict(int)) if self.count_edge else None
+
+        track_chain = self.count_vertex or self.count_edge
 
         def child_generator(ego):
             """Identical generator, but updates local state."""
@@ -347,130 +374,169 @@ class Pivoter:
             
             # reached a leaf node
             if not ego.label:
+                if track_chain:
+                    pv, hv = self._unpack_chain(ego.ph_chn)
+
                 for i in range(0, p + 1):
+                    k = h + i
+
                     ncr = comb(p, i)
-                    global_counts[h+i] += ncr
+                    g_counts[k] += ncr
 
-                    # vertex counts
-                    if self.get_curv: 
-                        pv, hv = self._unpack_chain(ego.ph_chn)
-
+                    # TODO mostly tested
+                    if self.count_vertex: 
                         for v in hv:
-                            vertex_counts[v][h+i] += ncr
+                            v_counts[v][k] += ncr
 
                         if i > 0 and p > 0:
                             ncr_p = (ncr * i) // p  # = comb(p-1, i-1)
                             for v in pv:
-                                vertex_counts[v][h+i] += ncr_p
+                                v_counts[v][k] += ncr_p
 
-                return 
+                    # TODO very much NOT tested
+                    if self.count_edge and k >= 2:
+                        # Combinatorics for how many times edges appear based on their sets
+                        ncr_0 = ncr
+                        ncr_1 = (ncr * i) // p if (i > 0 and p > 0) else 0
+                        ncr_2 = (ncr_1 * (i - 1)) // (p - 1) if (i > 1 and p > 1) else 0
+
+                        # Case A: Both vertices are Holds (Always present)
+                        if ncr_0 > 0 and len(hv) >= 2:
+                            for x in range(len(hv)):
+                                for y in range(x + 1, len(hv)):
+                                    e_counts[self._edge(pv[x], pv[y])][k] += ncr_0
+
+                        # Case B: One Hold, One Pivot
+                        if ncr_1 > 0 and hv and pv:
+                            for n1 in hv:
+                                for n2 in pv:
+                                    e_counts[self._edge(n1,n2)][k] += ncr_1
+                                    
+                        # Case C: Both vertices are Pivots
+                        if ncr_2 > 0 and len(pv) >= 2:
+                            for x in range(len(pv)):
+                                for y in range(x + 1, len(pv)):
+                                    e_counts[self._edge(pv[x], pv[y])][k] += ncr_2
+
+                return
 
             # find the best pivot
             pivot = self._choose_pivot(ego.label) 
             p_label = ego.label & self.neighborhoods[pivot]
-            p_chain = ((pivot, 1), ego.ph_chn) if self.get_curv else None
+            p_chain = ((pivot, 1), ego.ph_chn) if track_chain else None
             yield SCTnode(p_label, (p + 1, h), p_chain)
 
 
             h_labels = ego.label.difference(self.neighborhoods[pivot], {pivot})
             excluded_holds = set()
             for v in h_labels:
-                h_label = ego.label.intersection(self.neighborhoods[h]).difference(excluded_holds)                
-                h_chain = ((h, 0), ego.ph_chn) if self.get_curv else None
+                h_label = ego.label.intersection(self.neighborhoods[v]).difference(excluded_holds)                
+                h_chain = ((v, 0), ego.ph_chn) if track_chain else None
                 yield SCTnode(h_label, (p, h + 1), h_chain)
                 excluded_holds.add(v)
 
 
         # initialize generator stack with "root" hold node
-        root_chain = ((v, 0), None) if self.get_curv else None
+        root_chain = ((v, 0), None) if track_chain else None
         root_node = SCTnode(self.degen_order_nbhds[v], (0, 1), root_chain)
         stack = [child_generator(root_node)]
 
-        # classic DFS
+
+        # classic DFS - but with generators
         while stack:
-            # peek at top generator in stack
             active_gen = stack[-1]
 
-            # try to get the next item from the generator
-            # if successful, append generator of children
-            # if out of items, pop the genny
             try:
                 next_node = next(active_gen)
                 stack.append(child_generator(next_node))
             except StopIteration:
                 stack.pop()
 
-        # Return the "process" results
-        clean_v_counts = {k: dict(v) for k, v in vertex_counts.items()} if vertex_counts else None
-        return global_counts, clean_v_counts
 
-    def _aggregate(self, global_counts, vertex_counts) -> None:
+        # convert dict{dict} to dict{list}
+        v_counts_clean = {
+            v: [counts.get(k, 0) for k in range(max(counts) + 1)]
+            for v, counts in v_counts.items()
+        } if self.count_vertex and v_counts else {}
+
+        e_counts_clean = {
+            e: [counts.get(k, 0) for k in range(max(counts) + 1)]
+            for e, counts in e_counts.items()
+        } if self.count_edge and e_counts else {}
+
+        return g_counts, v_counts_clean, e_counts_clean
+
+
+    def _aggregate(self, g_counts, v_counts, e_counts) -> None:
         """Merges worker results back into the global state."""
 
-        for k, count in enumerate(global_counts):
+        for k, count in enumerate(g_counts):
             self.global_counts[k] += count
 
-        if self.get_curv and vertex_counts:
-            for v, k_counts in vertex_counts.items():
-                for k, count in k_counts.items():
-                    self.vertex_counts[v][k] += count
+        # v_counts defaults to {}
+        for v, incoming_list in v_counts.items():
+                target_list = self.vertex_counts[v]
+                
+                while len(target_list) < len(incoming_list):
+                    target_list.append(0)
+                    
+                for k in range(len(incoming_list)):
+                    target_list[k] += incoming_list[k]
+
+        # e_counts defaults to {}
+        for e, incoming_list in e_counts.items():
+            target_list = self.edge_counts[e]
+    
+            while len(target_list) < len(incoming_list):
+                target_list.append(0)
+                
+            for k, count in enumerate(incoming_list):
+                target_list[k] += count
 
 
 
+# ██████  ███████ ███████ ██    ██ ██      ████████ ███████ 
+# ██   ██ ██      ██      ██    ██ ██         ██    ██      
+# ██████  █████   ███████ ██    ██ ██         ██    ███████ 
+# ██   ██ ██           ██ ██    ██ ██         ██         ██ 
+# ██   ██ ███████ ███████  ██████  ███████    ██    ███████ 
+                                                                                                           
+    
     @property
     def global_ec(self) -> int:
         """
-        Computes the global Euler Characteristic as needed.
+        Computes the global Euler Characteristic.
         Formula: sum of (-1)^(k-1) * count_k
         """
-        if not self.global_counts:
-            return None
-            
         ec = 0
         for k, count in enumerate(self.global_counts):
             if k == 0 or count == 0:
                 continue
-            ec += ((-1) ** (k - 1)) * count
+            ec += ((-1) ** (k + 1)) * count
             
         return ec
 
     @property
     def vertex_ec(self) -> list[float] | None:
         """
-        Computes vertex curvatures from vertex_counts as needed.
-        Formula: sum of (-1)^(k-1) * (count_k / k)
+        Computes vertex curvatures from vertex_counts.
+        Formula: sum of (-1)^(k+1) * (count_k / k)
         """
         if not self.vertex_counts:
             return None
             
         curvatures = []
-        for v_counts in self.vertex_counts:
+        for counts in self.vertex_counts:
             curv = 0.0
-            for k, count in enumerate(v_counts):
-                if k == 0 or count == 0:
-                    continue
-                curv += ((-1) ** (k - 1)) * (count / k)
+            for k, count in enumerate(counts):
+                if k > 0 and count > 0:
+                    curv += ((-1) ** (k + 1)) * (count / k)
             curvatures.append(curv)
             
         return curvatures
     
 
     @property
-    def ec(self) -> list[int]:
-        """Alias for global_ec."""
-        return self.global_ec
-
-    @property
-    def clique_counts(self) -> list[int]:
-        """Alias for global_counts."""
-        return self.global_counts
-    
-    @property
     def curvatures(self) -> list[int]:
         """Alias for vertex_ec."""
         return self.vertex_ec
-    
-    @property
-    def vertex_clique_counts(self) -> list[int]:
-        """Alias for vertex_counts."""
-        return self.vertex_counts

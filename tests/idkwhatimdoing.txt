@@ -1,0 +1,15 @@
+pip install -e .[dev]
+
+maturin develop --release
+
+pytest -v (or -s to print stdout)
+
+
+# notes
+
+global_counts is always a list
+
+[py] vertex_counts is a jagged list of lists
+[py] v_counts is a dict of dicts, but returns as a dict of lists
+[rs] vertex_counts is a jagged list of lists
+[rs] hot loop is a hashmap of vecs
