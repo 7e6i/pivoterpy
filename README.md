@@ -19,6 +19,18 @@ G.count()
 G.clique_counts
 ```
 
+```
+# pip install pivoterpy
+
+import pivoterpy
+
+G = pivoterpy.from_adj(array)
+
+G.count()
+
+G.clique_counts
+```
+
 ## benchmarks
 - **CPU**: AMD Ryzen 5 3600, **RAM**: 32GB DDR4-3200MHz CL16
 - Tested on complete graphs with n nodes.

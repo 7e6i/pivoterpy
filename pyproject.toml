@@ -36,6 +36,8 @@ source = "https://github.com/7e6i/Pivoter"
 dev = [
     "pytest>=7.0",
     "maturin>=1.0,<2.0",
+    "networkx>=3.0",
+    "numpy>=2.0"
 ]
 
 
