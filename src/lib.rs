@@ -104,7 +104,7 @@ impl RustPivoter {
             (0..self.n).map(|v| {
                 // Remove the node from the map. 
                 // If it doesn't exist, return [0, 1] (which is redundant because it will always be visted)
-                v_map.remove(&v).unwrap_or_else(|| vec![BigUint::zero(), BigUint::one()]) #
+                v_map.remove(&v).unwrap_or_else(|| vec![BigUint::zero(), BigUint::one()])
             }).collect()
         });
 
