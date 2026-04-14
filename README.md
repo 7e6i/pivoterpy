@@ -1,57 +1,28 @@
 # pivoterpy
-Parallelized pure Python implementation of the `Pivoter` clique counting algorithm.
+Parallelized Python implementation of the `Pivoter` clique counting algorithm.
 
 Based on <u>The Power of Pivoting for Exact Clique Counting</u> by *S. Jain*, *C. Seshadhri*.
-
->*The greatest victory is that which requires no battle - Sun Tzu, The Art of War*
 
 ## quick start
 
 ```
 # pip install pivoterpy
 
-from pivoterpy import Pivoter
+import pivoterpy as piv
 
-G = Pivoter.from_adj_matrix(array)
-
-G.count()
-
-G.clique_counts
-```
-
-```
-# pip install pivoterpy
-
-import pivoterpy
-
-G = pivoterpy.from_adj(array)
+G = piv.from_adj_matrix(array)
 
 G.count()
 
-G.clique_counts
+G.global_counts
 ```
 
-## benchmarks
-- **CPU**: AMD Ryzen 5 3600, **RAM**: 32GB DDR4-3200MHz CL16
-- Tested on complete graphs with n nodes.
-- All times shown are the average of 10 runs (in **seconds**).
-- Setup refers to initialization time (nbhds, degen. ordering, etc)
-
----
-
-|   n   | setup | no mp | 4 procs | 8 procs |
-| ----- | ----- | ----- | ------- | ------- |
-| 300   | 0.02  |       |         |         |
-| 600   | 0.09  | 0:04  |         |         |
-| 900   | 0.22  | 0:13  | 0:04    |         |
-| 1200  | 0.36  |       | 0:11    | 0:11    |
-| 1500  | 0.69  |       |         | 0:22    |
 
 
 # Documentation
 
 ## usage
-Requires a N x N adjacency matrix. Only upper triangle is used.
+Requires a N x N binary matrix. Only upper triangle is used.
 
 Edges are created for entries > 0 (or True).
 
@@ -61,7 +32,7 @@ G = Pivoter.from_adj_matrix(array)
 
 Requires a M x 2 edge matrix and the positive integer number of nodes $n$.
 
-Note: all elements must be $(u,v)$ with $u,v\in\mathbb{Z}$ and $0\le u < v < n$.
+Note: all elements must be non-negative tuples $(u,v)$. $n$ defaults to the largest $u+1$.
 ```
 G = Pivoter.from_edge_list(array, n)
 ```
@@ -69,13 +40,13 @@ G = Pivoter.from_edge_list(array, n)
 
 Values available after construction.
 ```
-G.neighborhoods         # list of sets
-G.degrees               # list of ints
-G.by_degrees            # list of sets
-G.degeneracy            # int
-G.node_by_degen_order   # list of ints
-G.degen_order_by_node   # list of ints
-G.degen_order_nbhds     # list of sets
+G.neighborhoods
+G.degrees
+G.by_degrees
+G.degeneracy
+G.node_by_degen_order
+G.degen_order_by_node
+G.degen_order_nbhds
 ```
 
 ## counting
@@ -84,20 +55,22 @@ Multiprocessing is generally only beneficial for especially large or dense graph
 
 ```
 G.count(procs=4) # default is 0 (avoids mp.Pool)
-G.count(vertex=True) # default is False, finds vertex counts
+G.count(vertex=True) # finds vertex counts
+G.count(edge=True) # finds edge counts
+G.count(rust=True) # uses Rust backend
 ```
 
 Results available after completion:
 ```
 G.max_k         # max clique size
-G.global_ec     # G.ec (euler characteristic)
-G.global_counts # G.clique_counts
+G.global_ec     (alternating sum of counts)
+G.global_counts
 ```
 
 if `vertex` is True:
 ```
-G.vertex_ec   # G.curvatures
-G.vertex_counts # G.vertex_clique_counts
+G.vertex_ec   # also G.curvatures
+G.vertex_counts
 ```
 
 # Extras
