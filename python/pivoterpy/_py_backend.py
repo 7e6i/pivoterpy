@@ -29,13 +29,7 @@ class PythonKernel:
         self.min_k = min_k
         self.max_k = max_k
 
-        self._neighborhoods()
-        self._degeneracy_ordering()
-        self._degeneracy_nbhds()
-
-        # might be helpful, might not
-        # could use to allocate g_counts to array of [0]*max_k+1, not sure if helpful
-        self.max_k = min(self.max_k, self.degeneracy + 1)
+        self._setup_graph()
 
 
     def execute(self):
@@ -59,93 +53,77 @@ class PythonKernel:
 # ███████ ███████    ██     ██████  ██      
 
 
-    def _neighborhoods(self):
+    def _setup_graph(self):
+        """Builds neighborhoods, computes degeneracy ordering, and prunes roots."""
+        
+        # 1. Build initial neighborhoods and degree buckets
         self.nbhds = [set() for _ in range(self.n)]
-        self.degrees = [0] * self.n
-
+        degrees = [0] * self.n
+        
         for u, v in self.edges:
             self.nbhds[u].add(v)
             self.nbhds[v].add(u)
-
-            self.degrees[u] += 1
-            self.degrees[v] += 1
-
-        self.by_degrees = [set() for _ in range(self.n)]
-        for v, degree in enumerate(self.degrees):
-            self.by_degrees[degree].add(v)
-
-
-    def _degeneracy_ordering(self):
-        """degeneracy ordering of the nodes to optimize SCT construction"""
-
-        # node v is at the rth position in the ordering: L1[r]=v, L2[v]=r
-        L1, L2 = [], [None] * self.n
-        core_numbers = [0] * self.n # core number of each vertex
-
-        # temporary duplicate copies to avoid mutation
-        by_degrees = [s.copy() for s in self.by_degrees]
-        degrees = self.degrees[:]
-
-        rank, k, min_deg = 0, 0, 0  
-
-        # loop through nodes
-        for _ in range(self.n):
-            # find the node with lowest degree
+            degrees[u] += 1
+            degrees[v] += 1
+            
+        by_degrees = [set() for _ in range(self.n)]
+        for v, deg in enumerate(degrees):
+            by_degrees[deg].add(v)
+            
+        # 2. Matula-Beck Degeneracy Ordering (O(m))
+        degen_ranks = [0] * self.n  # degen_ranks[v] = rank of v
+        core_numbers = [0] * self.n
+        degeneracy = 0
+        min_deg = 0
+        processed = [False] * self.n
+        
+        for rank in range(self.n):
             while not by_degrees[min_deg]:
                 min_deg += 1
-
-            # update k, update v, change L1/L2 accordingly
-            k = max(k, min_deg)
+                
             v = by_degrees[min_deg].pop()
-            core_numbers[v] = k
-
-            L1.append(v)
-            L2[v] = rank
-            rank += 1
-            degrees[v] = -1
-
-            # update w in N(v)\L
+            processed[v] = True
+            degen_ranks[v] = rank
+            
+            degeneracy = max(degeneracy, min_deg)
+            core_numbers[v] = degeneracy
+            
             for w in self.nbhds[v]:
-                dw = degrees[w]
-                if dw == -1:
-                    continue
+                if not processed[w]:
+                    by_degrees[degrees[w]].remove(w)
+                    degrees[w] -= 1
+                    new_deg = degrees[w]
+                    by_degrees[new_deg].add(w)
+                    
+                    if new_deg < min_deg:
+                        min_deg = new_deg
+                        
 
-                by_degrees[dw].remove(w)
-                degrees[w] -= 1
-                by_degrees[dw - 1].add(w)
-
-                if degrees[w] < min_deg:
-                    min_deg = degrees[w]
-
-        self.degeneracy = k
-        self.node_by_degen_order = L1
-        self.degen_order_by_node = L2
-        self.core_numbers = core_numbers
-
-
-    def _degeneracy_nbhds(self):
-        degen_order_nbhds = [set() for _ in range(self.n)] # arr[v] = N^+(v)
-        ranks = self.degen_order_by_node
-
-        # A k-clique strictly requires all participating nodes to be in at least the (k-1)-core.
-        # relies on min_k being at least 1 in Pivoter.__init__
-        core_threshold = self.min_k - 1
-
+        self.max_k = min(self.max_k, degeneracy + 1)
+        
+        # 3. K-Core Pruned Degeneracy Neighborhoods & Valid Roots
+        self.degen_nbhds = [set() for _ in range(self.n)]
+        self.valid_roots = []
+        
+        # A k-clique requires participating nodes to be in at least the (k-1)-core.
+        core_threshold = self.min_k - 1 if self.min_k > 0 else 0
+        
         for v in range(self.n):
-            if self.core_numbers[v] < core_threshold:
+            # If the vertex doesn't survive the core threshold, drop it completely
+            if core_numbers[v] < core_threshold:
+                self.nbhds[v] = set() # to save memory... in python
                 continue
-
-            v_rank = ranks[v]
-
-            # Only keep forward neighbors that ALSO survive the k-core threshold.
-            forward_neighbors = {
+                
+            # Keep track of the valid roots for the DFS loop
+            self.valid_roots.append(v)
+            v_rank = degen_ranks[v]
+            
+            # Keep forward neighbors that ALSO survive the core threshold
+            self.degen_nbhds[v] = {
                 u for u in self.nbhds[v]
-                if ranks[u] > v_rank and self.core_numbers[u] >= core_threshold
+                if degen_ranks[u] > v_rank and core_numbers[u] >= core_threshold
             }
 
-            degen_order_nbhds[v] = forward_neighbors
-
-        self.degen_order_nbhds = degen_order_nbhds
 
 # ██   ██ ███████ ██      ██████  ███████ ██████  ███████ 
 # ██   ██ ██      ██      ██   ██ ██      ██   ██ ██      
@@ -203,16 +181,15 @@ class PythonKernel:
 
     def _count_global(self):
         self.global_counts  = []
-        roots = range(self.n)
 
         if self.procs == 1:
-            for v in roots:
+            for v in self.valid_roots:
                 g_counts = self._branch_global(v)
                 self._aggregate_global(g_counts)
         else:
             with Pool(processes=self.procs) as pool:
-                chunk = max(1, len(roots) // (self.procs * 4))
-                for g_counts in pool.imap_unordered(self._branch_global, roots, chunksize=chunk):
+                chunk = max(1, len(self.valid_roots) // (self.procs * 4))
+                for g_counts in pool.imap_unordered(self._branch_global, self.valid_roots, chunksize=chunk):
                     self._aggregate_global(g_counts)
 
     def _branch_global(self, v: int) -> list[int]:
@@ -248,7 +225,7 @@ class PythonKernel:
                     excluded_holds.add(w)
 
         # initialize generator stack with "root" hold node
-        root_node = SCTnode(self.degen_order_nbhds[v], (0, 1))
+        root_node = SCTnode(self.degen_nbhds[v], (0, 1))
         stack = [child_generator(root_node)]
 
         # classic DFS - but with generators
@@ -285,16 +262,15 @@ class PythonKernel:
 
     def _count_vertex(self):
         self.vertex_counts = [[] for _ in range(self.n)]
-        roots = range(self.n)
 
         if self.procs == 1:
-            for v in roots:
+            for v in self.valid_roots:
                 v_counts = self._branch_vertex(v)
                 self._aggregate_vertex(v_counts)
         else:
             with Pool(processes=self.procs) as pool:
-                chunk = max(1, len(roots)// (self.procs * 4))
-                for v_counts in pool.imap_unordered(self._branch_vertex, roots, chunksize=chunk):
+                chunk = max(1, len(self.valid_roots)// (self.procs * 4))
+                for v_counts in pool.imap_unordered(self._branch_vertex, self.valid_roots, chunksize=chunk):
                     self._aggregate_vertex(v_counts)
 
     def _branch_vertex(self, v: int) -> dict[list]:
@@ -343,7 +319,7 @@ class PythonKernel:
                     yield SCTnode_chn(h_label, (p, h + 1), ((w, 0), ego.ph_chn))
                     excluded_holds.add(w)
 
-        root_node = SCTnode_chn(self.degen_order_nbhds[v], (0, 1), ((v, 0), None))
+        root_node = SCTnode_chn(self.degen_nbhds[v], (0, 1), ((v, 0), None))
         stack = [child_generator(root_node)]
 
         # dfs
@@ -384,16 +360,15 @@ class PythonKernel:
 
     def _count_edge(self):
         self.edge_counts = {e: [] for e in self.edges}
-        roots = range(self.n)
 
         if self.procs == 1:
-            for v in roots:
+            for v in self.valid_roots:
                 e_counts = self._branch_edge(v)
                 self._aggregate_edge(e_counts)
         else:
             with Pool(processes=self.procs) as pool:
-                chunk = max(1, len(roots)// (self.procs * 4))
-                for e_counts in pool.imap_unordered(self._branch_edge, roots, chunksize=chunk):
+                chunk = max(1, len(self.valid_roots)// (self.procs * 4))
+                for e_counts in pool.imap_unordered(self._branch_edge, self.valid_roots, chunksize=chunk):
                     self._aggregate_edge(e_counts)
 
 
@@ -462,7 +437,7 @@ class PythonKernel:
                     yield SCTnode_chn(h_label, (p, h + 1), ((w, 0), ego.ph_chn))
                     excluded_holds.add(w)
 
-        root_node = SCTnode_chn(self.degen_order_nbhds[v], (0, 1), ((v, 0), None))
+        root_node = SCTnode_chn(self.degen_nbhds[v], (0, 1), ((v, 0), None))
         stack = [child_generator(root_node)]
 
         while stack:
