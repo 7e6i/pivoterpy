@@ -156,6 +156,7 @@ class Pivoter:
 
         # node v is at the rth position in the ordering: L1[r]=v, L2[v]=r
         L1, L2 = [], [None] * self.n
+        core_numbers = [0] * self.n # core number of each vertex
 
         # temporary duplicate copies to avoid mutation
         by_degrees = [s.copy() for s in self.by_degrees]
@@ -172,6 +173,7 @@ class Pivoter:
             # update k, update v, change L1/L2 accordingly
             k = max(k, min_deg)
             v = by_degrees[min_deg].pop()
+            core_numbers[v] = k
 
             L1.append(v)
             L2[v] = rank
@@ -194,6 +196,7 @@ class Pivoter:
         self.degeneracy = k
         self.node_by_degen_order = L1
         self.degen_order_by_node = L2
+        self.core_numbers = core_numbers
 
 
     def _degeneracy_nbhds(self):
@@ -219,7 +222,28 @@ class Pivoter:
 # ██   ██ ██      ██      ██      ██      ██   ██      ██ 
 # ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████ 
                                                         
-                                                        
+
+    # TODO would be easier to compute this in _degeneracy_nbhds()
+    def _chop_low_degrees(self) -> None:
+        """Removes all nodes with degree < k from the graph."""
+        
+        # We need nodes with degree at least min_k - 1
+        core_threshold = self.min_k - 1
+        filtered_nbhds = [[] for _ in range(self.n)]
+        
+        for v in range(self.n):
+            # Skip the vertex entirely if its core number is too low
+            if self.core_numbers[v] < core_threshold:
+                continue
+                
+            # Only keep neighbors that ALSO meet the threshold
+            filtered_nbhds[v] = [
+                u for u in self.degen_order_nbhds[v] 
+                if self.core_numbers[u] >= core_threshold
+            ]
+            
+        self.degen_order_nbhds = filtered_nbhds  
+
 
 
     def _trim_trailing_zeros(self) -> None:
@@ -292,13 +316,32 @@ class Pivoter:
             vertex: bool = False, 
             edge: bool = False,
             procs: int = None, 
-            rust: bool = False
+            rust: bool = False,
+
+            min_k: int = None,
+            max_k: int = None,
         ):
 
         assert vertex in [True, False], "vertex must be a boolean"
         assert edge in [True, False], "edge must be a boolean"
         assert procs is None or (isinstance(procs, int) and procs >= 1), "procs must be None or an integer >= 1"
         assert rust in [True, False], "rust must be a boolean"
+
+        
+        if min_k is not None:
+            assert isinstance(min_k, int) and (1 <= min_k <= self.n), "ensure 1 <= min_k <= n"
+            self.min_k = min_k
+        else: self.min_k = 1
+        # min_k=2, remove degree 0 nodes - which does basially nothing
+        if min_k >= 3: self._chop_low_degrees()
+
+        if max_k is not None:
+            assert isinstance(max_k, int) and (1 <= max_k <= self.n), "ensure 1 <= max_k <= n"
+            self.max_k = max_k
+        else: self.max_k = self.n
+
+        self._chop_low_degrees()
+     
 
         self.count_vertex = vertex
         self.count_edge = edge
