@@ -68,7 +68,15 @@ class pivoter:
             ).execute()
 
         elif self.backend == "r":
-            pass
+            from ._rs_backend import RustKernel
+            raw_data = RustKernel(
+                self.graph, 
+                self.resolution, 
+                self.procs, 
+                self._bumped_min, 
+                self._bumped_max
+            ).execute()
+
         elif self.backend == "c":
             pass
 
