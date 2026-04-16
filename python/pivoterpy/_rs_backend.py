@@ -23,8 +23,8 @@ class RustKernel:
                 "is compiled and installed in your environment."
             )
 
+        self.edges = G.edges
         self.n = G.n
-        self.edges = G.edges # Assumes a list of tuples: [(u, v), ...]
         
         self.resolution = resolution
         self.procs = procs
@@ -45,17 +45,17 @@ class RustKernel:
         
         if self.resolution == "g":
             return pivoter_rust.count_global(
-                self.n, self.edges, self.procs, self.min_k, self.max_k
+                self.edges, self.n,  self.procs, self.min_k, self.max_k
             )
             
         elif self.resolution == "v":
             return pivoter_rust.count_vertex(
-                self.n, self.edges, self.procs, self.min_k, self.max_k
+                self.edges, self.n, self.procs, self.min_k, self.max_k
             )
             
         elif self.resolution == "e":
             return pivoter_rust.count_edge(
-                self.n, self.edges, self.procs, self.min_k, self.max_k
+                self.edges, self.n, self.procs, self.min_k, self.max_k
             )
         else:
             raise ValueError(f"Unknown resolution passed to Rust backend: {self.resolution}")
