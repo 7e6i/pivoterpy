@@ -1,39 +1,47 @@
 import pytest
 import networkx as nx
-from pivoterpy import Pivoter
+import pivoterpy as pvt
+
 
 @pytest.fixture
-def karate_data():
+def karate_graph():
     """Generates the Karate Club graph in multiple formats."""
-    G = nx.karate_club_graph()
-    n = G.number_of_nodes()
-    m = G.number_of_edges()
+
+    return nx.karate_club_graph()
+
+def test_adj(karate_graph):
+    K = karate_graph
     
-    adj_matrix = nx.to_numpy_array(G)
-
-    edge_list = list(G.edges())
+    G = pvt.from_adj_matrix(nx.to_numpy_array(K))
     
-    return n, m, adj_matrix, edge_list
+    assert G.n == K.number_of_nodes()
 
-def test_adj(karate_data):
-    n, m, adj_matrix, edge_list = karate_data
+    assert G.m == K.number_of_edges()
+
+    assert G.edges == K.edges()
+
+
+def test_edges(karate_graph):
+    K = karate_graph
     
-    G1 = Pivoter.from_adj_matrix(adj_matrix)
+    # technically not a list but whatever
+    G = pvt.from_edge_list(K.edges())
+ 
+    assert G.n == K.number_of_nodes()
 
-    assert G1.n == n
+    assert G.m == K.number_of_edges()
 
-    assert G1.m == m
-
-    assert G1.edges == set(edge_list)
+    assert G.edges == K.edges()
 
 
-def test_edges(karate_data):
-    n, m, adj_matrix, edge_list = karate_data
-    
-    G2 = Pivoter.from_edge_list(edge_list, n)
-    
-    assert G2.n == n
 
-    assert G2.m == m
-    
-    assert G2.edges == set(edge_list)
+def test_networkx(karate_graph):
+    K = karate_graph
+
+    G = pvt.from_networkx(K)
+
+    assert G.n == K.number_of_nodes()
+
+    assert G.m == K.number_of_edges()
+
+    assert G.edges == K.edges()

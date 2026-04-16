@@ -13,3 +13,34 @@ global_counts is always a list
 [py] v_counts is a dict of dicts, but returns as a dict of lists
 [rs] vertex_counts is a jagged list of lists
 [rs] hot loop is a hashmap of vecs
+
+warnings.filterwarnings("ignore", category=UserWarning, module="pivoterpy")
+
+
+
+### mathemagics ###
+
+- min_k is at least 3 because k=2,1,0 are trivial
+- (k=3 for edges is also trivial but would require more conditionals)
+
+- max_k is at most max_degree + 1 since vertex with degree k could be in a k+1 clique
+- since all vertices in a k-clique have degree >= k-1, every vertex must in in the k-1 core
+
+
+### specs for backend return values ###
+
+global_counts:
+    - list of ints
+    - 4 <= len <= maximal clique +1
+
+vertex_counts
+    - jagged list of lists
+    - n rows
+    - each count list conforms to global count specs
+
+edge_counts
+    - dict of jagged lists
+    - m keys
+    - each count list conforms to global count specs
+
+
