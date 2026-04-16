@@ -1,20 +1,19 @@
 # pivoterpy
-Parallelized Python implementation of the `Pivoter` clique counting algorithm.
+A one-stop-shop for all your clique counting needs. Python, Rust (and hopefully CUDA soon) implementations of the `Pivoter` clique counting algorithm.
 
-Based on <u>The Power of Pivoting for Exact Clique Counting</u> by *S. Jain*, *C. Seshadhri*.
+
+> *"I fear not the man who has implemented 1000 clique algorithms, I fear the man who has implemented 1 clique algorithm a thousand times" - Sun Tzu, The Art of War*
 
 ## quick start
 
 ```
-# pip install pivoterpy
+import pivoterpy as pvt
 
-import pivoterpy as piv
+G = pvt.from_adj_matrix(array)
 
-G = piv.from_adj_matrix(array)
+P = pvt.pivoter(G)
 
-G.count()
-
-G.global_counts
+P.global_counts
 ```
 
 
