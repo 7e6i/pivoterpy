@@ -44,5 +44,5 @@ dev = [
 
 [tool.maturin]
 python-source = "python"
-module-name = "pivoterpy._rust_engine"
+module-name = "pivoterpy.pivoter_rust"
 features = ["pyo3/extension-module", "pyo3/abi3-py38", "pyo3/generate-import-lib", "pyo3/num-bigint"]
