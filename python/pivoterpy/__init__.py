@@ -1,9 +1,12 @@
 # python/pivoterpy/__init__.py
 
-from .core import Pivoter
+# pivoterpy/__init__.py
+from .graph import Graph
+from .solver import pivoter
 
+# Alias the graph constructors directly to the package level
+from_edge_list = Graph.from_edge_list
+from_adj_matrix = Graph.from_adj_matrix
+from_networkx = Graph.from_networkx
 
-from_adj_matrix = Pivoter.from_adj_matrix
-from_edge_list = Pivoter.from_edge_list
-
-__all__ = ["Pivoter", "from_adj_matrix", "from_edge_list"]
+__all__ = ["pivoter", "from_edge_list", "from_adj_matrix", "from_networkx"]
