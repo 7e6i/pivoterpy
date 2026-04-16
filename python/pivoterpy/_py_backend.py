@@ -1,9 +1,8 @@
 # pivoterpy/_py_backend.py
+
 from math import comb
 from multiprocessing import Pool
 from collections import defaultdict
-
-
 
 class SCTnode:
     __slots__ = ('label', 'ph_cnt', 'ph_chn')
@@ -19,17 +18,15 @@ class SCTnode_chn:
         self.ph_chn = ph_chn # ((node, edge), parent_chain)
 
 
-
 class PythonKernel:
 
     def __init__(self, G, resolution, procs, min_k, max_k):
-        self.n = G.n
-        self.m = G.m
         self.edges = G.edges
+        self.n = G.n
 
         self.resolution = resolution
         self.procs = procs
-        self.min_k = min_k # already min(3, min_k) from Pivoter
+        self.min_k = min_k
         self.max_k = max_k
 
         self._neighborhoods()
