@@ -16,7 +16,7 @@ def complete_graph():
 def karate_graph():
     edges = nx.karate_club_graph().edges()
     counts = [1, 34, 78, 45, 11, 2]
-    return edges, counts, len(counts)+1
+    return 34, edges, counts
 
 
 def test_python_singleton():
@@ -62,7 +62,7 @@ def test_python_complete(complete_graph):
 
 
 def test_python_karate(karate_graph):
-    edges, counts, n = karate_graph
+    n, edges, counts = karate_graph
     G = pvt.from_edge_list(edges)
 
     P = pvt.pivoter(G)
@@ -82,21 +82,10 @@ def test_python_karate(karate_graph):
             assert P.global_counts == [0]*i + counts[i:j+1]
 
 
-# def test_rust(karate_graph):
 
-#     # single threaded (not really though)
-#     G = Pivoter.from_edge_list(karate_graph)
-#     G.count(rust=True)
+# def test_python_karate2(karate_graph):
+#     n, edges, counts = karate_graph
+#     G = pvt.from_edge_list(edges)
 
-#     assert G.global_ec == EC
-#     assert G.global_counts == COUNTS
-#     assert G.vertex_counts == G.curvatures == G.edge_counts == None
-
-
-#     # multi-threaded
-#     G = Pivoter.from_edge_list(karate_graph)
-#     G.count(procs=2, rust=True)
-
-#     assert G.global_ec == EC
-#     assert G.global_counts == COUNTS
-#     assert G.vertex_counts == G.curvatures == G.edge_counts == None
+#     P = pvt.pivoter(G, min_k=5, max_k=5)
+#     print(P.global_counts)
