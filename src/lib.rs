@@ -3,11 +3,14 @@ use pyo3::prelude::*;
 
 // 1. Declare your modules
 mod cpu_backend;
+mod cpu_experimental;
 mod gpu_backend;
 
 // 2. Bring the specific functions into this file's scope so PyO3 can see them
-use cpu_backend::{count_global, count_vertex, count_edge, count_global_exp};
+use cpu_backend::{count_global, count_vertex, count_edge};
 use gpu_backend::count_global_cuda;
+use cpu_experimental::count_global_exp;
+
 
 // 3. The Python Module Manifest
 #[pymodule]
@@ -17,6 +20,8 @@ fn pivoter_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_global, m)?)?;
     m.add_function(wrap_pyfunction!(count_vertex, m)?)?;
     m.add_function(wrap_pyfunction!(count_edge, m)?)?;
+
+    // experimental CPU testing
     m.add_function(wrap_pyfunction!(count_global_exp, m)?)?;
     
     // GPU functions
