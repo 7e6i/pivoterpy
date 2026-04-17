@@ -1,12 +1,10 @@
 # pivoterpy/_cu_backend.py
 
-import sys
-
 try:
-    import pivoter_cuda
+    from . import pivoter_rust
 except ImportError:
     raise ImportError(
-        "CUDA backend not found. Ensure the pivoter_cuda extension "
+        "CUDA (Rust) backend not found. Ensure the pivoter_cuda extension "
         "is compiled and accessible in your environment."
     )
 
@@ -25,30 +23,14 @@ class CUDAKernel:
 
     def execute(self):
         """Routes the execution to the compiled CUDA binaries."""
-        try:
-            if self.resolution == "g":
-                return pivoter_cuda.count_global(
-                    self.edges, self.n, self.procs, self.min_k, self.max_k
-                )
-            
-            elif self.resolution == "v":
-                return pivoter_cuda.count_vertex(
-                    self.edges, self.n, self.procs, self.min_k, self.max_k
-                )
-            
-            elif self.resolution == "e":
-                return pivoter_cuda.count_edge(
-                    self.edges, self.n, self.procs, self.min_k, self.max_k
-                )
-            
-            else:
-                raise ValueError(f"Invalid resolution flag: '{self.resolution}'. Use 'g', 'v', or 'e'.")
-                
-        except KeyboardInterrupt:
-            # \r overwrites the ugly '^C' that echoes to the terminal
-            print("\r🛑 CUDA execution cancelled by user. Tearing down GPU streams...")
-            sys.exit(0)
-            
-        except Exception as e:
-            print(f"\r❌ A CUDA runtime error occurred: {e}")
-            sys.exit(1)
+        
+        if self.resolution == "g":
+            return pivoter_rust.count_global_rust(
+                self.edges, self.n, self.procs, self.min_k, self.max_k
+            )
+        
+        elif self.resolution == "v":
+            pass
+        
+        elif self.resolution == "e":
+            pass

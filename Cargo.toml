@@ -13,3 +13,6 @@ rayon = "1.8"
 fixedbitset = "0.4"
 num-bigint = "0.4"
 num-traits = "0.2"
+
+[build-dependencies]
+cc = "1.0"
