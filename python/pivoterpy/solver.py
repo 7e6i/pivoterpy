@@ -87,7 +87,14 @@ class pivoter:
             ).execute()
 
         elif self.backend == "c":
-            pass
+            from ._cu_backend import CUDAKernel
+            raw_data = CUDAKernel(
+                self.graph, 
+                self.resolution, 
+                self.procs, 
+                self._bumped_min, 
+                self._bumped_max
+            ).execute()
 
         
         # assign data to correct variable
