@@ -5,7 +5,7 @@ import warnings
 # We wrap the import in a try-except block so the library doesn't instantly crash 
 # if the user hasn't compiled the Rust extension (e.g., they only want to use Python).
 try:
-    import pivoter_rust  # The compiled PyO3 module name (adjust if you name your crate differently)
+    from . import pivoter_rust  # The compiled PyO3 module name (adjust if you name your crate differently)
     HAS_RUST_BACKEND = True
 except ImportError:
     HAS_RUST_BACKEND = False
@@ -25,6 +25,7 @@ class RustKernel:
 
         self.edges = G.edges
         self.n = G.n
+        self.experimental = G.experimental
         
         self.resolution = resolution
         self.procs = procs
@@ -43,6 +44,12 @@ class RustKernel:
         # Rust Vec<Vec<u64>> -> Python List[List[int]]
         # Rust HashMap<(u64, u64), Vec<u64>> -> Python Dict[Tuple[int, int], List[int]]
         
+        if self.experimental:
+            return pivoter_rust.count_global_exp(
+                self.edges, self.n,  self.procs, self.min_k, self.max_k
+            )
+
+
         if self.resolution == "g":
             return pivoter_rust.count_global(
                 self.edges, self.n,  self.procs, self.min_k, self.max_k

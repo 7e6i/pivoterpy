@@ -28,6 +28,7 @@ fn pivoter_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_global, m)?)?;
     m.add_function(wrap_pyfunction!(count_vertex, m)?)?;
     m.add_function(wrap_pyfunction!(count_edge, m)?)?;
+    m.add_function(wrap_pyfunction!(count_global_exp, m)?)?;
     Ok(())
 }
 
@@ -200,7 +201,6 @@ pub fn count_global(
     let v_prime = valid_roots.len();
 
     // 2. Initialize a custom Rayon ThreadPool
-    // This safely isolates your engine without crashing the global Python state
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(procs)
         .build()
@@ -211,10 +211,17 @@ pub fn count_global(
         (0..v_prime)
             .into_par_iter()
             .map(|new_v| {
+                // Initialize the root task dynamically
+                let root_node = SCTnode {
+                    label: compressed_degen_nbhds[new_v].clone(),
+                    p: 0,
+                    h: 1,
+                };
+
+                // Pass it to the unified DFS engine
                 branch_global(
-                    new_v, 
+                    root_node, 
                     &compressed_nbhds, 
-                    &compressed_degen_nbhds, 
                     min_k, 
                     effective_max_k
                 )
@@ -230,9 +237,9 @@ pub fn count_global(
             )
     });
 
-    // chop zeroes
+    // 4. Chop Trailing Zeroes
     let mut actual_max = global_counts.len().saturating_sub(1);
-    while actual_max > 0 && global_counts[actual_max].is_zero() { // <-- CHANGED
+    while actual_max > 0 && global_counts[actual_max].is_zero() { 
         actual_max -= 1;
     }
     
@@ -242,23 +249,18 @@ pub fn count_global(
 }
 
 
-// --- 3. The Hot Loop DFS Engine ---
+// --- 3. The Unified Hot Loop DFS Engine ---
 fn branch_global(
-    start_v: usize,
+    root_node: SCTnode, // Now accepts any initialized task node
     compressed_nbhds: &[FixedBitSet],
-    compressed_degen_nbhds: &[FixedBitSet],
     min_k: usize,
     max_k: usize,
 ) -> Vec<BigUint> {
     let mut local_counts = vec![BigUint::zero(); max_k + 1];
     let mut stack = Vec::new();
 
-    // Push the Root Node
-    stack.push(SCTnode {
-        label: compressed_degen_nbhds[start_v].clone(),
-        p: 0,
-        h: 1,
-    });
+    // Start directly from the provided task
+    stack.push(root_node);
 
     while let Some(SCTnode { label, p, h }) = stack.pop() {
         let size = label.count_ones(..);
@@ -286,16 +288,14 @@ fn branch_global(
         let mut pivot = 0;
         let mut max_degree = 0;
         
-        // Iterates instantly over set bits (the actual valid vertices)
         for w in label.ones() {
             let mut isect = label.clone();
-            isect.intersect_with(&compressed_nbhds[w]); // Bitwise AND
+            isect.intersect_with(&compressed_nbhds[w]); 
             
             let deg = isect.count_ones(..);
             if deg >= max_degree {
                 max_degree = deg;
                 pivot = w;
-                // Break early if we found a mathematically optimal pivot
                 if max_degree == size - 1 { break; } 
             }
         }
@@ -312,9 +312,8 @@ fn branch_global(
 
         // --- 2. Hold Branches ---
         if h + 1 <= max_k {
-            // h_labels = label \ (nbhds[pivot] U {pivot})
             let mut h_cands = label.clone();
-            h_cands.difference_with(&compressed_nbhds[pivot]); // Bitwise AND NOT
+            h_cands.difference_with(&compressed_nbhds[pivot]); 
             h_cands.set(pivot, false);
 
             let mut excluded_holds = FixedBitSet::with_capacity(label.len());
@@ -726,3 +725,181 @@ fn branch_edge(
 
 
 
+// ███████ ██   ██ ██████  ███████ ██████  ██ ███    ███ ███████ ███    ██ ████████  █████  ██      
+// ██       ██ ██  ██   ██ ██      ██   ██ ██ ████  ████ ██      ████   ██    ██    ██   ██ ██      
+// █████     ███   ██████  █████   ██████  ██ ██ ████ ██ █████   ██ ██  ██    ██    ███████ ██      
+// ██       ██ ██  ██      ██      ██   ██ ██ ██  ██  ██ ██      ██  ██ ██    ██    ██   ██ ██      
+// ███████ ██   ██ ██      ███████ ██   ██ ██ ██      ██ ███████ ██   ████    ██    ██   ██ ███████ 
+
+
+// --- 1. Sequential Expansion (Level 1) ---
+fn expand_root(
+    start_v: usize,
+    compressed_nbhds: &[FixedBitSet],
+    compressed_degen_nbhds: &[FixedBitSet],
+    min_k: usize,
+    max_k: usize,
+) -> (Vec<BigUint>, Vec<SCTnode>) {
+    let mut local_counts = vec![BigUint::zero(); max_k + 1];
+    let mut sub_tasks = Vec::new();
+
+    let label = compressed_degen_nbhds[start_v].clone();
+    let p = 0;
+    let h = 1;
+    let size = label.count_ones(..);
+
+    // --- Leaf Node Reached Immediately ---
+    if size == 0 {
+        let max_i = std::cmp::min(p, max_k.saturating_sub(h));
+        if h + max_i >= min_k {
+            for i in 0..=max_i {
+                let k = h + i;
+                if k >= min_k && k <= max_k {
+                    local_counts[k] += ncr(p, i);
+                }
+            }
+        }
+        return (local_counts, sub_tasks);
+    }
+
+    // --- Pruning Wall ---
+    if h + p + size < min_k {
+        return (local_counts, sub_tasks);
+    }
+
+    // --- Find the Pivot ---
+    let mut pivot = 0;
+    let mut max_degree = 0;
+    
+    for w in label.ones() {
+        let mut isect = label.clone();
+        isect.intersect_with(&compressed_nbhds[w]); 
+        
+        let deg = isect.count_ones(..);
+        if deg >= max_degree {
+            max_degree = deg;
+            pivot = w;
+            if max_degree == size - 1 { break; } 
+        }
+    }
+
+    // --- 1. Pivot Branch ---
+    let mut p_label = label.clone();
+    p_label.intersect_with(&compressed_nbhds[pivot]);
+    
+    sub_tasks.push(SCTnode {
+        label: p_label,
+        p: p + 1,
+        h,
+    });
+
+    // --- 2. Hold Branches ---
+    if h + 1 <= max_k {
+        let mut h_cands = label.clone();
+        h_cands.difference_with(&compressed_nbhds[pivot]); 
+        h_cands.set(pivot, false);
+
+        let mut excluded_holds = FixedBitSet::with_capacity(label.len());
+
+        for w in h_cands.ones() {
+            let mut h_label = label.clone();
+            h_label.intersect_with(&compressed_nbhds[w]);
+            h_label.difference_with(&excluded_holds);
+
+            sub_tasks.push(SCTnode {
+                label: h_label,
+                p,
+                h: h + 1,
+            });
+            
+            excluded_holds.insert(w);
+        }
+    }
+
+    (local_counts, sub_tasks)
+}
+
+
+#[pyfunction]
+pub fn count_global_exp(
+    edges: Vec<(usize, usize)>, 
+    n: usize, 
+    procs: usize, 
+    min_k: usize, 
+    max_k: usize
+) -> PyResult<Vec<BigUint>> {
+    
+    let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
+        setup_graph(&edges, n, min_k, max_k);
+
+    let v_prime = valid_roots.len();
+    let mut global_counts = vec![BigUint::zero(); effective_max_k + 1];
+    
+    // ---------------------------------------------------------
+    // Phase 1: Sequential Task Generation
+    // ---------------------------------------------------------
+    let mut task_queue: Vec<SCTnode> = Vec::new();
+
+    for new_v in 0..v_prime {
+        let (root_counts, mut sub_tasks) = expand_root(
+            new_v, 
+            &compressed_nbhds, 
+            &compressed_degen_nbhds, 
+            min_k, 
+            effective_max_k
+        );
+
+        // Add any trivial/immediate leaf counts to the global total
+        for i in 0..global_counts.len() {
+            global_counts[i] += &root_counts[i];
+        }
+
+        // Append to our massive queue of independent jobs
+        task_queue.append(&mut sub_tasks);
+    }
+
+    // ---------------------------------------------------------
+    // Phase 2: Massively Parallel Execution
+    // ---------------------------------------------------------
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(procs)
+        .build()
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+    let parallel_counts = pool.install(|| {
+        task_queue
+            .into_par_iter() // Parallelize over the fine-grained tasks, not the roots!
+            .map(|task| {
+                branch_global(
+                    task, 
+                    &compressed_nbhds, 
+                    min_k, 
+                    effective_max_k
+                )
+            })
+            .reduce(
+                || vec![BigUint::zero(); effective_max_k + 1],
+                |mut acc, local| {
+                    for i in 0..acc.len() {
+                        acc[i] += &local[i];
+                    }
+                    acc
+                }
+            )
+    });
+
+    // Merge the parallel results back into the global totals
+    for i in 0..global_counts.len() {
+        global_counts[i] += &parallel_counts[i];
+    }
+
+    // Chop Trailing Zeroes
+    let mut actual_max = global_counts.len().saturating_sub(1);
+    while actual_max > 0 && global_counts[actual_max].is_zero() {
+        actual_max -= 1;
+    }
+    
+    global_counts.truncate(actual_max + 1);
+
+    Ok(global_counts)
+}
