@@ -1,9 +1,8 @@
 # pivoterpy/solver.py
 
 from .graph import Graph
-from ._py_backend import PythonKernel
 import sys
-import warnings
+
 
 class pivoter:
     """The main stateful solver for clique counting."""
@@ -47,6 +46,7 @@ class pivoter:
         try:
             self._run()
         except KeyboardInterrupt:
+            # make sure KeyboardInterrupt isn't caught in any of the backends
             print("\rExecution cancelled by user.")
             sys.exit(0) 
         except Exception as e:
@@ -67,6 +67,7 @@ class pivoter:
             raw_data = None
  
         elif self.backend == "p":
+            from ._py_backend import PythonKernel
             raw_data = PythonKernel(
                 self.graph,
                 self.resolution,

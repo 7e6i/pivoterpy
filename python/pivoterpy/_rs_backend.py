@@ -1,11 +1,7 @@
 # pivoterpy/_rs_backend.py
 
-import warnings
-
-# We wrap the import in a try-except block so the library doesn't instantly crash 
-# if the user hasn't compiled the Rust extension (e.g., they only want to use Python).
 try:
-    from . import pivoter_rust  # The compiled PyO3 module name (adjust if you name your crate differently)
+    from . import pivoter_rust  # The compiled PyO3 module name
     HAS_RUST_BACKEND = True
 except ImportError:
     HAS_RUST_BACKEND = False
@@ -59,5 +55,3 @@ class RustKernel:
             return pivoter_rust.count_edge(
                 self.edges, self.n, self.procs, self.min_k, self.max_k
             )
-        else:
-            raise ValueError(f"Unknown resolution passed to Rust backend: {self.resolution}")

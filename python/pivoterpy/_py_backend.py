@@ -5,6 +5,7 @@ from multiprocessing import Pool
 from collections import defaultdict
 import signal
 
+
 def init_worker():
     """Forces worker processes to ignore Ctrl+C so the main thread can handle it."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
