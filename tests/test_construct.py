@@ -18,7 +18,7 @@ def test_adj(karate_graph):
 
     assert G.m == K.number_of_edges()
 
-    assert G.edges == K.edges()
+    assert set(G.edges) == K.edges()
 
 
 def test_edges(karate_graph):
@@ -31,7 +31,7 @@ def test_edges(karate_graph):
 
     assert G.m == K.number_of_edges()
 
-    assert G.edges == K.edges()
+    assert set(G.edges) == K.edges()
 
 
 
@@ -44,4 +44,4 @@ def test_networkx(karate_graph):
 
     assert G.m == K.number_of_edges()
 
-    assert G.edges == K.edges()
+    assert set(G.edges) == K.edges()
