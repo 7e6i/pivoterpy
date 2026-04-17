@@ -2,7 +2,7 @@
 
 from .graph import Graph
 from ._py_backend import PythonKernel
-
+import sys
 import warnings
 
 class pivoter:
@@ -44,7 +44,15 @@ class pivoter:
         self._vertex_counts = None
         self._edge_counts = None
 
-        self._run()
+        try:
+            self._run()
+        except KeyboardInterrupt:
+            print("\rExecution cancelled by user.")
+            sys.exit(0) 
+        except Exception as e:
+            print(f"\rAn unexpected error occurred: {e}")
+            sys.exit(1)
+           
 
   
     def _run(self):
