@@ -6,6 +6,10 @@ use fixedbitset::FixedBitSet;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::{Zero, One};
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
+use std::time::Duration;
+
 
 struct SCTnode {
     label: FixedBitSet,
@@ -185,8 +189,16 @@ fn ncr(n: usize, k: usize) -> BigUint {
 //  ██████  ███████  ██████  ██████  ██   ██ ███████ 
 
 
+/*
+Peforms DFS on the level 1 nodes (found in the degen order).
+
+The bitsets have been recalculated on the induced subgraph of the min_k-core (nodes in the degen order)
+but have not been recalculated on the induced subgraphs of the level 1 nodes.
+*/
+
 #[pyfunction]
 pub fn count_global(
+    py: Python, // <-- PyO3 injects the GIL token here
     edges: Vec<(usize, usize)>, 
     n: usize, 
     procs: usize, 
@@ -200,44 +212,75 @@ pub fn count_global(
 
     let v_prime = valid_roots.len();
 
-    // 2. Initialize a custom Rayon ThreadPool
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(procs)
-        .build()
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    // 2. Setup the Cancellation Token & Channel
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_worker = Arc::clone(&cancel); 
+    let (tx, rx) = mpsc::channel();
 
-    // 3. Parallel Execution inside the pool
-    let mut global_counts = pool.install(|| {
-        (0..v_prime)
-            .into_par_iter()
-            .map(|new_v| {
-                // Initialize the root task dynamically
-                let root_node = SCTnode {
-                    label: compressed_degen_nbhds[new_v].clone(),
-                    p: 0,
-                    h: 1,
-                };
+    // 3. Spawn Rayon in the Background Thread
+    std::thread::spawn(move || {
+        // We use unwrap() here because if thread creation fails, the worker panics 
+        // and the main thread cleanly catches it as a Disconnect error below.
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
+        
+        let parallel_counts = pool.install(|| {
+            (0..v_prime)
+                .into_par_iter()
+                .map(|new_v| {
+                    // Initialize the root task dynamically
+                    let root_node = SCTnode {
+                        label: compressed_degen_nbhds[new_v].clone(),
+                        p: 0,
+                        h: 1,
+                    };
 
-                // Pass it to the unified DFS engine
-                branch_global(
-                    root_node, 
-                    &compressed_nbhds, 
-                    min_k, 
-                    effective_max_k
-                )
-            })
-            .reduce(
-                || vec![BigUint::zero(); effective_max_k + 1],
-                |mut acc, local| {
-                    for i in 0..acc.len() {
-                        acc[i] += &local[i];
+                    // Pass it to the unified DFS engine
+                    branch_global(
+                        root_node, 
+                        &compressed_nbhds, 
+                        min_k, 
+                        effective_max_k,
+                        &cancel_worker // Pass token to worker
+                    )
+                })
+                .reduce(
+                    // Explicit type hint to prevent E0282
+                    || -> Vec<BigUint> { vec![BigUint::zero(); effective_max_k + 1] },
+                    |mut acc: Vec<BigUint>, local: Vec<BigUint>| {
+                        if !cancel_worker.load(Ordering::Relaxed) {
+                            for i in 0..acc.len() {
+                                acc[i] += &local[i];
+                            }
+                        }
+                        acc
                     }
-                    acc
-                }
-            )
+                )
+        });
+
+        // Send the result back to the main thread
+        let _ = tx.send(parallel_counts);
     });
 
-    // 4. Chop Trailing Zeroes
+    // 4. The Main Thread Watchdog
+    let mut global_counts = loop {
+        // Ask Python if the user hit Ctrl+C
+        if let Err(e) = py.check_signals() {
+            // Instantly flip the atomic flag so Rayon threads commit suicide
+            cancel.store(true, Ordering::Relaxed);
+            return Err(e); 
+        }
+
+        // Check if Rayon finished its work 
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(counts) => break counts, // Done! Exit loop with the data.
+            Err(mpsc::RecvTimeoutError::Timeout) => continue, // Still working.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err("Rust worker thread crashed."));
+            }
+        }
+    };
+
+    // 5. Chop Trailing Zeroes
     let mut actual_max = global_counts.len().saturating_sub(1);
     while actual_max > 0 && global_counts[actual_max].is_zero() { 
         actual_max -= 1;
@@ -251,18 +294,29 @@ pub fn count_global(
 
 // --- 3. The Unified Hot Loop DFS Engine ---
 fn branch_global(
-    root_node: SCTnode, // Now accepts any initialized task node
+    root_node: SCTnode, 
     compressed_nbhds: &[FixedBitSet],
     min_k: usize,
     max_k: usize,
+    cancel_flag: &AtomicBool, // <-- Added token
 ) -> Vec<BigUint> {
+
     let mut local_counts = vec![BigUint::zero(); max_k + 1];
     let mut stack = Vec::new();
-
-    // Start directly from the provided task
     stack.push(root_node);
 
+    let mut iteration = 0usize;
+
     while let Some(SCTnode { label, p, h }) = stack.pop() {
+        
+        // --- Cooperative Cancellation Check ---
+        iteration = iteration.wrapping_add(1);
+        if iteration & 1023 == 0 {
+            if cancel_flag.load(Ordering::Relaxed) {
+                return vec![]; // Drop the branch instantly
+            }
+        }
+
         let size = label.count_ones(..);
 
         // --- Leaf Node Reached ---
@@ -345,9 +399,9 @@ fn branch_global(
 //   ████   ███████ ██   ██    ██    ███████ ██   ██ 
 
 
-// --- Vertex PyFunction ---
 #[pyfunction]
 pub fn count_vertex(
+    py: Python, // <-- PyO3 injects the GIL token here
     edges: Vec<(usize, usize)>, 
     n: usize, 
     procs: usize, 
@@ -355,48 +409,99 @@ pub fn count_vertex(
     max_k: usize
 ) -> PyResult<Vec<Vec<BigUint>>> {
     
+    // 1. Build Compressed Neighborhoods
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
         setup_graph(&edges, n, min_k, max_k);
 
     let v_prime = valid_roots.len();
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
 
-    let mut compressed_results = pool.install(|| {
-        (0..v_prime)
-            .into_par_iter()
-            .map(|new_v| {
-                branch_vertex(new_v, &compressed_nbhds, &compressed_degen_nbhds, min_k, effective_max_k)
-            })
-            // Thread-Local Accumulator (v_prime matrix)
-            .fold(
-                || vec![vec![]; v_prime], 
-                |mut acc, local_map| {
-                    for (v, counts) in local_map {
-                        if acc[v].is_empty() { acc[v] = vec![BigUint::zero(); effective_max_k + 1]; }
-                        for i in 0..counts.len() { acc[v][i] += &counts[i]; }
-                    }
-                    acc
-                }
-            )
-            // Global Merge
-            .reduce(
-                || vec![vec![]; v_prime],
-                |mut acc1, acc2| {
-                    for v in 0..v_prime {
-                        if !acc2[v].is_empty() {
-                            if acc1[v].is_empty() {
-                                acc1[v] = acc2[v].clone();
-                            } else {
-                                for i in 0..acc2[v].len() { acc1[v][i] += &acc2[v][i]; }
+    // 2. Setup the Cancellation Token & Channel
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_worker = Arc::clone(&cancel); 
+    let (tx, rx) = mpsc::channel();
+
+    // 3. Spawn Rayon in the Background Thread
+    std::thread::spawn(move || {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
+
+        let parallel_results = pool.install(|| {
+            (0..v_prime)
+                .into_par_iter()
+                .map(|new_v| {
+                    // Initialize the root task dynamically
+                    let root_node = SCTnodeChn {
+                        label: compressed_degen_nbhds[new_v].clone(),
+                        p: 0,
+                        h: 1,
+                        pv: Vec::new(),
+                        hv: vec![new_v],
+                    };
+
+                    branch_vertex(
+                        root_node, 
+                        &compressed_nbhds, 
+                        min_k, 
+                        effective_max_k,
+                        &cancel_worker // Pass token to worker
+                    )
+                })
+                // Thread-Local Accumulator (v_prime matrix)
+                .fold(
+                    || -> Vec<Vec<BigUint>> { vec![vec![]; v_prime] }, 
+                    |mut acc: Vec<Vec<BigUint>>, local_map: HashMap<usize, Vec<BigUint>>| {
+                        if !cancel_worker.load(Ordering::Relaxed) {
+                            for (v, counts) in local_map {
+                                if acc[v].is_empty() { acc[v] = vec![BigUint::zero(); effective_max_k + 1]; }
+                                for i in 0..counts.len() { acc[v][i] += &counts[i]; }
                             }
                         }
+                        acc
                     }
-                    acc1
-                }
-            )
+                )
+                // Global Merge
+                .reduce(
+                    || -> Vec<Vec<BigUint>> { vec![vec![]; v_prime] },
+                    |mut acc1: Vec<Vec<BigUint>>, acc2: Vec<Vec<BigUint>>| {
+                        if !cancel_worker.load(Ordering::Relaxed) {
+                            for v in 0..v_prime {
+                                if !acc2[v].is_empty() {
+                                    if acc1[v].is_empty() {
+                                        acc1[v] = acc2[v].clone();
+                                    } else {
+                                        for i in 0..acc2[v].len() { acc1[v][i] += &acc2[v][i]; }
+                                    }
+                                }
+                            }
+                        }
+                        acc1
+                    }
+                )
+        });
+
+        // Send the result back to the main thread
+        let _ = tx.send(parallel_results);
     });
 
-    // Remap to original IDs and chop zeroes
+    // 4. The Main Thread Watchdog
+    let mut compressed_results = loop {
+        // Ask Python if the user hit Ctrl+C
+        if let Err(e) = py.check_signals() {
+            // Instantly flip the atomic flag so Rayon threads commit suicide
+            cancel.store(true, Ordering::Relaxed);
+            return Err(e); 
+        }
+
+        // Check if Rayon finished its work 
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(results) => break results, // Done! Exit loop with the data.
+            Err(mpsc::RecvTimeoutError::Timeout) => continue, // Still working.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err("Rust worker thread crashed."));
+            }
+        }
+    };
+
+    // 5. Remap to original IDs and chop zeroes
     let mut final_counts = vec![vec![]; n];
     for new_id in 0..v_prime {
         let old_id = valid_roots[new_id];
@@ -415,24 +520,29 @@ pub fn count_vertex(
 
 // --- Vertex Hot Loop ---
 fn branch_vertex(
-    start_v: usize,
+    root_node: SCTnodeChn,
     compressed_nbhds: &[FixedBitSet],
-    compressed_degen_nbhds: &[FixedBitSet],
     min_k: usize,
     max_k: usize,
+    cancel_flag: &AtomicBool // <-- Added token
 ) -> HashMap<usize, Vec<BigUint>> {
+
     let mut local_counts = HashMap::new();
     let mut stack = Vec::new();
+    stack.push(root_node);
 
-    stack.push(SCTnodeChn {
-        label: compressed_degen_nbhds[start_v].clone(),
-        p: 0,
-        h: 1,
-        pv: Vec::new(),
-        hv: vec![start_v], // The root is always a hold
-    });
+    let mut iteration = 0usize;
 
     while let Some(SCTnodeChn { label, p, h, pv, hv }) = stack.pop() {
+        
+        // --- Cooperative Cancellation Check ---
+        iteration = iteration.wrapping_add(1);
+        if iteration & 1023 == 0 {
+            if cancel_flag.load(Ordering::Relaxed) {
+                return HashMap::new(); // Drop the branch instantly
+            }
+        }
+
         let size = label.count_ones(..);
 
         // --- Leaf Node Reached ---
@@ -540,6 +650,7 @@ fn normalize_edge(u: usize, v: usize) -> (usize, usize) {
 // --- Edge PyFunction ---
 #[pyfunction]
 pub fn count_edge(
+    py: Python, // <-- PyO3 injects the GIL token here
     edges: Vec<(usize, usize)>, 
     n: usize, 
     procs: usize, 
@@ -547,48 +658,100 @@ pub fn count_edge(
     max_k: usize
 ) -> PyResult<HashMap<(usize, usize), Vec<BigUint>>> {
     
+    // 1. Build Compressed Neighborhoods
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
         setup_graph(&edges, n, min_k, max_k);
 
     let v_prime = valid_roots.len();
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
 
-    let compressed_results = pool.install(|| {
-        (0..v_prime)
-            .into_par_iter()
-            .map(|new_v| {
-                branch_edge(new_v, &compressed_nbhds, &compressed_degen_nbhds, min_k, effective_max_k)
-            })
-            // Thread-Local Accumulator HashMap
-            .fold(
-                || HashMap::new(),
-                |mut acc, local_map| {
-                    for (e, counts) in local_map {
-                        let target = acc.entry(e).or_insert_with(|| vec![BigUint::zero(); effective_max_k + 1]);
-                        for i in 0..counts.len() { target[i] += &counts[i]; }
+    // 2. Setup the Cancellation Token & Channel
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_worker = Arc::clone(&cancel); 
+    let (tx, rx) = mpsc::channel();
+
+    // 3. Spawn Rayon in the Background Thread
+    std::thread::spawn(move || {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
+
+        let compressed_results = pool.install(|| {
+            (0..v_prime)
+                .into_par_iter()
+                .map(|new_v| {
+                    // Initialize the root task dynamically
+                    let root_node = SCTnodeChn {
+                        label: compressed_degen_nbhds[new_v].clone(),
+                        p: 0,
+                        h: 1,
+                        pv: Vec::new(),
+                        hv: vec![new_v],
+                    };
+
+                    branch_edge(
+                        root_node, 
+                        &compressed_nbhds, 
+                        min_k, 
+                        effective_max_k,
+                        &cancel_worker // Pass token to worker
+                    )
+                })
+                // Thread-Local Accumulator HashMap
+                .fold(
+                    || -> HashMap<(usize, usize), Vec<BigUint>> { HashMap::new() },
+                    |mut acc: HashMap<(usize, usize), Vec<BigUint>>, local_map: HashMap<(usize, usize), Vec<BigUint>>| {
+                        if !cancel_worker.load(Ordering::Relaxed) {
+                            for (e, counts) in local_map {
+                                let target = acc.entry(e).or_insert_with(|| vec![BigUint::zero(); effective_max_k + 1]);
+                                for i in 0..counts.len() { target[i] += &counts[i]; }
+                            }
+                        }
+                        acc
                     }
-                    acc
-                }
-            )
-            // Global Merge
-            .reduce(
-                || HashMap::new(),
-                |mut acc1, acc2| {
-                    for (e, counts) in acc2 {
-                        let target = acc1.entry(e).or_insert_with(|| vec![BigUint::zero(); effective_max_k + 1]);
-                        for i in 0..counts.len() { target[i] += &counts[i]; }
+                )
+                // Global Merge
+                .reduce(
+                    || -> HashMap<(usize, usize), Vec<BigUint>> { HashMap::new() },
+                    |mut acc1: HashMap<(usize, usize), Vec<BigUint>>, acc2: HashMap<(usize, usize), Vec<BigUint>>| {
+                        if !cancel_worker.load(Ordering::Relaxed) {
+                            for (e, counts) in acc2 {
+                                let target = acc1.entry(e).or_insert_with(|| vec![BigUint::zero(); effective_max_k + 1]);
+                                for i in 0..counts.len() { target[i] += &counts[i]; }
+                            }
+                        }
+                        acc1
                     }
-                    acc1
-                }
-            )
+                )
+        });
+
+        // Send the result back to the main thread
+        let _ = tx.send(compressed_results);
     });
 
-    // Remap back to original graph IDs and format for Python
+    // 4. The Main Thread Watchdog
+    let compressed_results = loop {
+        // Ask Python if the user hit Ctrl+C
+        if let Err(e) = py.check_signals() {
+            // Instantly flip the atomic flag so Rayon threads commit suicide
+            cancel.store(true, Ordering::Relaxed);
+            return Err(e); 
+        }
+
+        // Check if Rayon finished its work
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(results) => break results, // Done! Exit loop with the data.
+            Err(mpsc::RecvTimeoutError::Timeout) => continue, // Still working.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err("Rust worker thread crashed."));
+            }
+        }
+    };
+
+    // 5. Remap back to original graph IDs and format for Python
     let mut final_counts = HashMap::new();
     for ((new_u, new_v), mut counts) in compressed_results {
         let old_u = valid_roots[new_u];
         let old_v = valid_roots[new_v];
         
+        // Ensure edge direction remains consistent after translating IDs
         let norm_e = normalize_edge(old_u, old_v);
 
         let mut actual_max = counts.len().saturating_sub(1);
@@ -601,29 +764,34 @@ pub fn count_edge(
     Ok(final_counts)
 }
 
-
 // --- Edge Hot Loop ---
 fn branch_edge(
-    start_v: usize,
+    root_node: SCTnodeChn,
     compressed_nbhds: &[FixedBitSet],
-    compressed_degen_nbhds: &[FixedBitSet],
     min_k: usize,
     max_k: usize,
+    cancel_flag: &AtomicBool // <-- Added token
 ) -> HashMap<(usize, usize), Vec<BigUint>> {
+
     let mut local_counts = HashMap::new();
     let mut stack = Vec::new();
+    stack.push(root_node);
 
-    stack.push(SCTnodeChn {
-        label: compressed_degen_nbhds[start_v].clone(),
-        p: 0,
-        h: 1,
-        pv: Vec::new(),
-        hv: vec![start_v],
-    });
+    let mut iteration = 0usize;
 
     while let Some(SCTnodeChn { label, p, h, pv, hv }) = stack.pop() {
+        
+        // --- Cooperative Cancellation Check ---
+        iteration = iteration.wrapping_add(1);
+        if iteration & 1023 == 0 {
+            if cancel_flag.load(Ordering::Relaxed) {
+                return HashMap::new(); // Drop the branch instantly
+            }
+        }
+
         let size = label.count_ones(..);
 
+        // --- Leaf Node Reached ---
         if size == 0 {
             let max_i = std::cmp::min(p, max_k.saturating_sub(h));
             if h + max_i >= min_k {
@@ -732,6 +900,15 @@ fn branch_edge(
 // ███████ ██   ██ ██      ███████ ██   ██ ██ ██      ██ ███████ ██   ████    ██    ██   ██ ███████ 
 
 
+/*
+Focuses on parallelizing at level 2 nodes by looping through the level 1 (degen order) nodes
+and adding their children to a list. By performing DFS on the level 2 nodes, we aim to 
+create more units of work, allowing for the Rayon work stealing to better distribute the load.
+
+While the inital setup work recaculates the neighborhood bitsets on the induced subgraph of 
+the min_k-core, this optimization does not re-calculate the induced subgraphs for level 1 nodes.
+*/
+
 // --- 1. Sequential Expansion (Level 1) ---
 fn expand_root(
     start_v: usize,
@@ -822,6 +999,7 @@ fn expand_root(
 
 #[pyfunction]
 pub fn count_global_exp(
+    py: Python, // <-- PyO3 injects the GIL token here
     edges: Vec<(usize, usize)>, 
     n: usize, 
     procs: usize, 
@@ -859,34 +1037,68 @@ pub fn count_global_exp(
     }
 
     // ---------------------------------------------------------
-    // Phase 2: Massively Parallel Execution
+    // Phase 2: Setup the Cancellation Token & Channel
     // ---------------------------------------------------------
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(procs)
-        .build()
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_worker = Arc::clone(&cancel); 
+    let (tx, rx) = mpsc::channel();
 
-    let parallel_counts = pool.install(|| {
-        task_queue
-            .into_par_iter() // Parallelize over the fine-grained tasks, not the roots!
-            .map(|task| {
-                branch_global(
-                    task, 
-                    &compressed_nbhds, 
-                    min_k, 
-                    effective_max_k
-                )
-            })
-            .reduce(
-                || vec![BigUint::zero(); effective_max_k + 1],
-                |mut acc, local| {
-                    for i in 0..acc.len() {
-                        acc[i] += &local[i];
+    // ---------------------------------------------------------
+    // Phase 3: Massively Parallel Execution (Background Thread)
+    // ---------------------------------------------------------
+    std::thread::spawn(move || {
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
+
+        let parallel_counts = pool.install(|| {
+            task_queue
+                .into_par_iter() // Parallelize over the fine-grained tasks, not the roots!
+                .map(|task| {
+                    branch_global(
+                        task, 
+                        &compressed_nbhds, 
+                        min_k, 
+                        effective_max_k,
+                        &cancel_worker // Pass token to worker
+                    )
+                })
+                .reduce(
+                    // Explicit type hint to prevent E0282
+                    || -> Vec<BigUint> { vec![BigUint::zero(); effective_max_k + 1] },
+                    |mut acc: Vec<BigUint>, local: Vec<BigUint>| {
+                        if !cancel_worker.load(Ordering::Relaxed) {
+                            for i in 0..acc.len() {
+                                acc[i] += &local[i];
+                            }
+                        }
+                        acc
                     }
-                    acc
-                }
-            )
+                )
+        });
+
+        // Send the result back to the main thread
+        let _ = tx.send(parallel_counts);
     });
+
+    // ---------------------------------------------------------
+    // Phase 4: The Main Thread Watchdog
+    // ---------------------------------------------------------
+    let parallel_counts = loop {
+        // Ask Python if the user hit Ctrl+C
+        if let Err(e) = py.check_signals() {
+            // Instantly flip the atomic flag so Rayon threads commit suicide
+            cancel.store(true, Ordering::Relaxed);
+            return Err(e); 
+        }
+
+        // Check if Rayon finished its work 
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(counts) => break counts, // Done! Exit loop with the data.
+            Err(mpsc::RecvTimeoutError::Timeout) => continue, // Still working.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err("Rust worker thread crashed."));
+            }
+        }
+    };
 
     // Merge the parallel results back into the global totals
     for i in 0..global_counts.len() {

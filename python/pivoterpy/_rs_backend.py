@@ -38,12 +38,7 @@ class RustKernel:
         Passes the raw graph topology and configuration to Rust.
         Rust will handle the degeneracy ordering internally to avoid FFI serialization overhead.
         """
-        
-        # PyO3 automatically translates:
-        # Rust Vec<u64> -> Python List[int]
-        # Rust Vec<Vec<u64>> -> Python List[List[int]]
-        # Rust HashMap<(u64, u64), Vec<u64>> -> Python Dict[Tuple[int, int], List[int]]
-        
+
         if self.experimental:
             return pivoter_rust.count_global_exp(
                 self.edges, self.n,  self.procs, self.min_k, self.max_k
