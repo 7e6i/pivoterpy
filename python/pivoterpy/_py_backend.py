@@ -31,6 +31,8 @@ class PythonKernel:
 
         self._setup_graph()
 
+        self.chunk_size = max(1, len(self.valid_roots) // (self.procs * 4))
+
 
     def execute(self):
         if self.resolution == "g":
@@ -170,6 +172,40 @@ class PythonKernel:
     def _edge(self, u: int, v: int):
         """Returns normalized edges such that u < v"""
         return (u, v) if u < v else (v, u)
+    
+
+    def _aggregate(self, counts) -> None:
+
+        if self.resolution == "g":
+            target_list = self.global_counts
+            
+            while len(target_list) < len(counts):
+                target_list.append(0)
+                
+            for k in range(len(counts)):
+                target_list[k] += counts[k]
+
+        elif self.resolution == "v":
+            for v, incoming_list in counts.items():
+                target_list = self.vertex_counts[v]
+            
+                while len(target_list) < len(incoming_list):
+                    target_list.append(0)
+                    
+                for k in range(len(incoming_list)):
+                    target_list[k] += incoming_list[k]
+
+        # exact same as vertex
+        elif self.resolution == "e":
+            for e, incoming_list in counts.items():
+                target_list = self.edge_counts[e]
+        
+                while len(target_list) < len(incoming_list):
+                    target_list.append(0)
+                    
+                for k, count in enumerate(incoming_list):
+                    target_list[k] += count
+
 
 
 #  ██████  ██       ██████  ██████   █████  ██      
@@ -180,17 +216,27 @@ class PythonKernel:
 
 
     def _count_global(self):
-        self.global_counts  = []
+        self.global_counts = []
 
         if self.procs == 1:
             for v in self.valid_roots:
-                g_counts = self._branch_global(v)
-                self._aggregate_global(g_counts)
+                counts = self._branch_global(v)
+                self._aggregate(counts)
         else:
-            with Pool(processes=self.procs) as pool:
-                chunk = max(1, len(self.valid_roots) // (self.procs * 4))
-                for g_counts in pool.imap_unordered(self._branch_global, self.valid_roots, chunksize=chunk):
-                    self._aggregate_global(g_counts)
+            pool = Pool(processes=self.procs)
+            try:
+                for counts in pool.imap_unordered(self._branch_global, self.valid_roots, chunksize=self.chunk_size):
+                    self._aggregate(counts)
+                    
+            except KeyboardInterrupt:
+                pool.terminate()
+                pool.join()
+                raise 
+
+            finally:
+                pool.close()
+                pool.join()
+
 
     def _branch_global(self, v: int) -> list[int]:
         g_counts = defaultdict(int) # could be a list
@@ -241,18 +287,6 @@ class PythonKernel:
         return [g_counts.get(k, 0) for k in range(max(g_counts) + 1)] if g_counts else []
 
 
-    def _aggregate_global(self, g_counts) -> None:
-        """Merges worker results back into the global state."""
-
-        target_list = self.global_counts
-            
-        while len(target_list) < len(g_counts):
-            target_list.append(0)
-            
-        for k in range(len(g_counts)):
-            target_list[k] += g_counts[k]
-
-
 # ██    ██ ███████ ██████  ████████ ███████ ██   ██ 
 # ██    ██ ██      ██   ██    ██    ██       ██ ██  
 # ██    ██ █████   ██████     ██    █████     ███   
@@ -265,13 +299,22 @@ class PythonKernel:
 
         if self.procs == 1:
             for v in self.valid_roots:
-                v_counts = self._branch_vertex(v)
-                self._aggregate_vertex(v_counts)
+                counts = self._branch_vertex(v)
+                self._aggregate(counts)
         else:
-            with Pool(processes=self.procs) as pool:
-                chunk = max(1, len(self.valid_roots)// (self.procs * 4))
-                for v_counts in pool.imap_unordered(self._branch_vertex, self.valid_roots, chunksize=chunk):
-                    self._aggregate_vertex(v_counts)
+            pool = Pool(processes=self.procs)
+            try:
+                for counts in pool.imap_unordered(self._branch_vertex, self.valid_roots, chunksize=self.chunk_size):
+                    self._aggregate(counts)
+                    
+            except KeyboardInterrupt:
+                pool.terminate()
+                pool.join()
+                raise 
+
+            finally:
+                pool.close()
+                pool.join()
 
     def _branch_vertex(self, v: int) -> dict[list]:
         v_counts = defaultdict(lambda: defaultdict(int))
@@ -337,18 +380,6 @@ class PythonKernel:
         } if v_counts else {}
 
 
-    def _aggregate_vertex(self, v_counts) -> None:
-        """Merges worker results back into the global state."""
-        # v_counts defaults to {}
-        for v, incoming_list in v_counts.items():
-            target_list = self.vertex_counts[v]
-            
-            while len(target_list) < len(incoming_list):
-                target_list.append(0)
-                
-            for k in range(len(incoming_list)):
-                target_list[k] += incoming_list[k]
-
 
 # ███████ ██████   ██████  ███████ 
 # ██      ██   ██ ██       ██      
@@ -363,13 +394,22 @@ class PythonKernel:
 
         if self.procs == 1:
             for v in self.valid_roots:
-                e_counts = self._branch_edge(v)
-                self._aggregate_edge(e_counts)
+                counts = self._branch_edge(v)
+                self._aggregate(counts)
         else:
-            with Pool(processes=self.procs) as pool:
-                chunk = max(1, len(self.valid_roots)// (self.procs * 4))
-                for e_counts in pool.imap_unordered(self._branch_edge, self.valid_roots, chunksize=chunk):
-                    self._aggregate_edge(e_counts)
+            pool = Pool(processes=self.procs)
+            try:
+                for counts in pool.imap_unordered(self._branch_edge, self.valid_roots, chunksize=self.chunk_size):
+                    self._aggregate(counts)
+                    
+            except KeyboardInterrupt:
+                pool.terminate()
+                pool.join()
+                raise 
+
+            finally:
+                pool.close()
+                pool.join()
 
 
     def _branch_edge(self, v: int) -> dict[list]:
@@ -454,14 +494,4 @@ class PythonKernel:
             for e, counts in e_counts.items()
         } if e_counts else {}
 
-
-    def _aggregate_edge(self, e_counts) -> None:
-        for e, incoming_list in e_counts.items():
-            target_list = self.edge_counts[e]
-    
-            while len(target_list) < len(incoming_list):
-                target_list.append(0)
-                
-            for k, count in enumerate(incoming_list):
-                target_list[k] += count
 
