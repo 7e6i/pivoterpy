@@ -6,7 +6,7 @@ class Graph:
     Calculates structural metadata (neighborhoods, k-core numbers) upon instantiation.
     """
     
-    __slots__ = ('edges', 'n', 'm', 'degrees')
+    __slots__ = ('edges', 'n', 'm', 'degrees', 'experimental')
 
     def __init__(self, edges: set[tuple[int, int]], n: int):
         self.edges = edges
@@ -17,6 +17,8 @@ class Graph:
         for u, v in self.edges:
             self.degrees[u] += 1
             self.degrees[v] += 1
+
+        self.experimental = None
 
 
     @classmethod
@@ -29,11 +31,11 @@ class Graph:
             assert 1==0, "go touch grass"
 
         n = len(array)
-        edges = set()
+        edges = []
         for i in range(n):
             for j in range(i + 1, n):
                 if array[i][j] > 0:
-                    edges.add((i, j))
+                    edges.append((i, j))
 
         return cls(edges=edges, n=n)
 
@@ -67,14 +69,12 @@ class Graph:
 
         assert len(edges) > 0 or n is not None, "No edges and no n provided"
 
-        return cls(edges=edges, n=n)
+        return cls(edges=list(edges), n=n)
 
 
     @classmethod
     def from_networkx(cls, G: object) -> 'Graph':
         """Creates a Graph from a NetworkX graph."""
-        edges = set()
-        for u, v in G.edges:
-            edges.add((u, v))
+        edges = [(u, v) for u, v in G.edges]
 
         return cls(edges=edges, n=G.number_of_nodes())
