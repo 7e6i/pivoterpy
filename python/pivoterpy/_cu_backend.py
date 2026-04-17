@@ -25,7 +25,11 @@ class CUDAKernel:
         """Routes the execution to the compiled CUDA binaries."""
         
         if self.resolution == "g":
-            return pivoter_rust.count_global_rust(
+            test = pivoter_rust.count_global_cuda()
+            print(test)
+            return
+        
+            return pivoter_rust.count_global_cuda(
                 self.edges, self.n, self.procs, self.min_k, self.max_k
             )
         
