@@ -3,6 +3,11 @@
 from math import comb
 from multiprocessing import Pool
 from collections import defaultdict
+import signal
+
+def init_worker():
+    """Forces worker processes to ignore Ctrl+C so the main thread can handle it."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 class SCTnode:
     __slots__ = ('label', 'ph_cnt', 'ph_chn')
@@ -223,19 +228,13 @@ class PythonKernel:
                 counts = self._branch_global(v)
                 self._aggregate(counts)
         else:
-            pool = Pool(processes=self.procs)
-            try:
-                for counts in pool.imap_unordered(self._branch_global, self.valid_roots, chunksize=self.chunk_size):
-                    self._aggregate(counts)
-                    
-            except KeyboardInterrupt:
-                pool.terminate()
-                pool.join()
-                raise 
-
-            finally:
-                pool.close()
-                pool.join()
+            with Pool(processes=self.procs, initializer=init_worker) as pool:
+                try:
+                    for counts in pool.imap_unordered(self._branch_global, self.valid_roots, chunksize=self.chunk_size):
+                        self._aggregate(counts)
+                except KeyboardInterrupt:
+                    pool.terminate()
+                    raise
 
 
     def _branch_global(self, v: int) -> list[int]:
@@ -302,19 +301,13 @@ class PythonKernel:
                 counts = self._branch_vertex(v)
                 self._aggregate(counts)
         else:
-            pool = Pool(processes=self.procs)
-            try:
-                for counts in pool.imap_unordered(self._branch_vertex, self.valid_roots, chunksize=self.chunk_size):
-                    self._aggregate(counts)
-                    
-            except KeyboardInterrupt:
-                pool.terminate()
-                pool.join()
-                raise 
-
-            finally:
-                pool.close()
-                pool.join()
+            with Pool(processes=self.procs, initializer=init_worker) as pool:
+                try:
+                    for counts in pool.imap_unordered(self._branch_vertex, self.valid_roots, chunksize=self.chunk_size):
+                        self._aggregate(counts)
+                except KeyboardInterrupt:
+                    pool.terminate()
+                    raise
 
     def _branch_vertex(self, v: int) -> dict[list]:
         v_counts = defaultdict(lambda: defaultdict(int))
@@ -397,19 +390,13 @@ class PythonKernel:
                 counts = self._branch_edge(v)
                 self._aggregate(counts)
         else:
-            pool = Pool(processes=self.procs)
-            try:
-                for counts in pool.imap_unordered(self._branch_edge, self.valid_roots, chunksize=self.chunk_size):
-                    self._aggregate(counts)
-                    
-            except KeyboardInterrupt:
-                pool.terminate()
-                pool.join()
-                raise 
-
-            finally:
-                pool.close()
-                pool.join()
+            with Pool(processes=self.procs, initializer=init_worker) as pool:
+                try:
+                    for counts in pool.imap_unordered(self._branch_edge, self.valid_roots, chunksize=self.chunk_size):
+                        self._aggregate(counts)
+                except KeyboardInterrupt:
+                    pool.terminate()
+                    raise
 
 
     def _branch_edge(self, v: int) -> dict[list]:
