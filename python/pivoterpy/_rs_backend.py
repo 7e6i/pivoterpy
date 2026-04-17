@@ -1,10 +1,12 @@
 # pivoterpy/_rs_backend.py
 
 try:
-    from . import pivoter_rust  # The compiled PyO3 module name
-    HAS_RUST_BACKEND = True
+    from . import pivoter_rust
 except ImportError:
-    HAS_RUST_BACKEND = False
+    raise ImportError(
+        "The Rust backend could not be imported. Please ensure 'pivoter_rust' "
+        "is compiled and installed in your environment."
+    )
 
 
 class RustKernel:
@@ -13,12 +15,6 @@ class RustKernel:
     """
 
     def __init__(self, G, resolution, procs, min_k, max_k):
-        if not HAS_RUST_BACKEND:
-            raise ImportError(
-                "The Rust backend could not be imported. Please ensure 'pivoter_rust' "
-                "is compiled and installed in your environment."
-            )
-
         self.edges = G.edges
         self.n = G.n
         self.experimental = G.experimental
