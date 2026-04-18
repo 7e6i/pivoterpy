@@ -20,6 +20,7 @@ def test():
     G = pvt.from_edge_list(edges,n=n)
 
     P = pvt.pivoter(G, backend="cuda")
+    #print(P.global_counts)
     
 
 if __name__ == "__main__":
