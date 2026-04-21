@@ -13,36 +13,39 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # 1. PURE CPU BUILD FOR LINUX
+  # 1.  BUILD FOR LINUX & SOURCE CODE
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
       - uses: PyO3/maturin-action@v1
         with:
           manylinux: auto
           command: build
-          args: --release --out dist
-      - uses: actions/upload-artifact@v4
+          # build source and wheel simultaneously
+          args: --release --out dist --sdist 
+      - uses: actions/upload-artifact@v7
         with:
-          name: wheels-linux
+          name: wheels-linux-sdist
           path: dist
 
   # 2. BUILD FOR WINDOWS
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: '3.8' 
           architecture: x64
+      - uses: Swatinem/rust-cache@v2
       - uses: PyO3/maturin-action@v1
         with:
           command: build
           target: x64
           args: --release --out dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-windows
           path: dist
@@ -51,27 +54,14 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
       - uses: PyO3/maturin-action@v1
         with:
           command: build
           target: universal2-apple-darwin
           args: --release --out dist 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-macos
-          path: dist
-
-  # 4. BUILD THE SOURCE CODE FALLBACK
-  sdist:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-sdist
           path: dist
