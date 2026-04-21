@@ -21,7 +21,8 @@ class pivoter:
 
         assert isinstance(resolution, str)
         assert isinstance(resolution, str) and resolution.lower() in ("global", "g", "vertex", "v", "edge", "e"), "resolution must be one of 'g[lobal]', 'v[ertex]', or 'e[dge]'"
-        assert isinstance(resolution, str) and backend.lower() in ("python", "p", "rust", "r", "cuda", "c"), "backend must be one of 'p[ython]', 'r[ust]', 'c[uda]'"
+        #assert isinstance(resolution, str) and backend.lower() in ("python", "p", "rust", "r", "cuda", "c"), "backend must be one of 'p[ython]', 'r[ust]', 'c[uda]'"
+        assert isinstance(resolution, str) and backend.lower() in ("python", "p", "rust", "r"), "backend must be one of 'p[ython]', 'r[ust]'"
         assert isinstance(procs, int) and procs >= 1, "procs must be a positive integer"
         assert min_k is None or (isinstance(min_k, int) and (0 <= min_k <= graph.n)), "ensure 0 <= min_k <= n"
         assert max_k is None or (isinstance(max_k, int) and (0 <= max_k <= graph.n)), "ensure 0 <= max_k <= n"
