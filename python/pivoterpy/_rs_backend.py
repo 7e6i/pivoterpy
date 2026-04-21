@@ -31,13 +31,13 @@ class RustKernel:
         Rust will handle the degeneracy ordering internally to avoid FFI serialization overhead.
         """
 
-        if self.experimental:
-            return pivoter_rust.count_global_exp(
-                self.edges, self.n,  self.procs, self.min_k, self.max_k
-            )
-
-
         if self.resolution == "g":
+
+            if self.experimental:
+                return pivoter_rust.count_global_exp(
+                    self.edges, self.n,  self.procs, self.min_k, self.max_k
+                )
+
             return pivoter_rust.count_global(
                 self.edges, self.n,  self.procs, self.min_k, self.max_k
             )
