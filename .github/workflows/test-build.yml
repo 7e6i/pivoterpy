@@ -18,24 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2 
       - uses: PyO3/maturin-action@v1
         with:
           manylinux: auto
           command: build
-          # build source and wheel simultaneously
           args: --release --out dist --sdist 
-      # Upload just the Wheel (.whl)
       - uses: actions/upload-artifact@v7
         with:
-          name: wheels-linux
-          path: dist/*.whl
-
-      # Upload just the Source Code (.tar.gz)
-      - uses: actions/upload-artifact@v7
-        with:
-          name: source-distribution
-          path: dist/*.tar.gz
+          name: wheels-linux-sdist
+          path: dist
 
   # 2. BUILD FOR WINDOWS
   windows:
@@ -46,7 +38,7 @@ jobs:
         with:
           python-version: '3.8' 
           architecture: x64
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2 
       - uses: PyO3/maturin-action@v1
         with:
           command: build
@@ -62,7 +54,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2 
       - uses: PyO3/maturin-action@v1
         with:
           command: build

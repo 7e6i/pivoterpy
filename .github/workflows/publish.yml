@@ -6,6 +6,9 @@ on:
   release:
     types: [published]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # 1. PURE CPU BUILD FOR LINUX & SOURCE CODE
   linux:
@@ -66,12 +69,17 @@ jobs:
     needs: [linux, windows, macos]
     environment: pypi
     permissions:
-      id-token: write 
+      id-token: write
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
           merge-multiple: true
           path: dist
+      - name: Attach Wheels to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.event.release.tag_name }} dist/*
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
