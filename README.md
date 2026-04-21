@@ -101,7 +101,7 @@ With `resolution='vertex'` the below are available (including `global` results).
 ```
 P.vertex_counts # jagged list of lists of ints
 P.vertex_ec     # list of ints, alternating sum of counts
-P.vertex_curvatures    # list of floats
+P.curvatures    # list of floats
 ```
 
 With `resolution='global'` the below are available.
