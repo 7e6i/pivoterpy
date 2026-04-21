@@ -251,7 +251,7 @@ class pivoter:
         return v_ec
 
     @property
-    def vertex_curvatures(self) -> list[float]:
+    def curvatures(self) -> list[float]:
         """Fractional Curvature, Discrete Gauss-Bonnet, Levitt Curvature, Combinatorial Curvature"""
 
         v_curv = None

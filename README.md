@@ -77,7 +77,7 @@ P = pvt.pivoter(
 - multiprocessing and all resolutions are implemented for both backends
 
 `procs`
-- parallelizes the recursion across the level 1 SCT nodes
+- parallelizes the recursion across the level-1 SCT nodes
 - if `procs=1` and `backend='python'` then `mp.Pool` is skipped entirely
  
 `min_k`
@@ -101,7 +101,7 @@ With `resolution='vertex'` the below are available (including `global` results).
 ```
 P.vertex_counts # jagged list of lists of ints
 P.vertex_ec     # list of ints, alternating sum of counts
-P.vertex_curvatures    # list of floats
+P.curvatures    # list of floats
 ```
 
 With `resolution='global'` the below are available.
@@ -150,14 +150,16 @@ Large Sparse Real-World Graph](https://arxiv.org/pdf/1103.0318)
 
 
 ## citation
-Below is the preferred BibTeX citation for this repository.
+You should definitely cite the original `Pivoter` paper (listed above).
+
+If you're feeling generous, you can also cite this package (BibTeX info below).
 
 ```
 @software{anderson_pivoterpy_2026,
   author       = {Spencer Anderson},
   title        = {{pivoterpy}},
   year         = {2026},
-  version      = {2.0.0},
+  version      = {2.0.1},
   url          = {https://github.com/7e6i/pivoterpy}
 }
 ```
