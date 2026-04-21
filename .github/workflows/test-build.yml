@@ -1,10 +1,13 @@
-# .github/workflows/publish.yml
+# .github/workflows/test-build.yml
 
-name: Build and Publish to PyPI
+name: Test Build (No Publish)
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Allows you to click "Run workflow" manually
 
 jobs:
   # 1. BUILD FOR LINUX
@@ -12,6 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
+      # NOTE: If you still need CUDA for the Linux build, uncomment these lines:
+      # - name: Install CUDA Toolkit
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y nvidia-cuda-toolkit gcc-13 g++-13
+          
       - uses: PyO3/maturin-action@v1
         with:
           manylinux: auto
@@ -69,20 +79,3 @@ jobs:
         with:
           name: wheels-sdist
           path: dist
-
-  # 5. PUBLISH ALL FILES TO PYPI
-  pypi-publish:
-    name: Publish to PyPI
-    runs-on: ubuntu-latest
-    needs: [linux, windows, macos, sdist]
-    environment: pypi
-    permissions:
-      id-token: write 
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: wheels-*
-          merge-multiple: true
-          path: dist
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
