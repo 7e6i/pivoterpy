@@ -4,6 +4,9 @@ A one-stop-shop for all your clique counting needs. Python, Rust (and hopefully 
 
 > *"I fear not the man who has implemented 1000 clique algorithms, I fear the man who has implemented 1 clique algorithm a thousand times" - Sun Tzu, The Art of War*
 
+Let $G=(V,E)$ be a graph with $|V|=n$ nodes and $|E|=m$ edges. Let $C_k$ be the number of global cliques of size $k$. Let $C_k(v)$ and $C_k(e)$ be the number of vertex and edge cliques of size $k$ for vertex $v$ and edge $e$, respectively. Let $\mathcal{K}$ be the size of the largest clique in the graph.
+
+
 ## quick start
 
 ```
@@ -20,57 +23,94 @@ P.global_counts
 
 # Documentation
 
-## usage
-Requires a N x N binary matrix. Only upper triangle is used.
+## initialization
 
-Edges are created for entries > 0 (or True).
+Use the following constructors to load a graph.
 
 ```
-G = Pivoter.from_adj_matrix(array)
+G = pvt.from_adj_matrix(array)
 ```
 
-Requires a M x 2 edge matrix and the positive integer number of nodes $n$.
+- Requires a $n \times n$ binary matrix. Only the upper triangle is scanned.
 
-Note: all elements must be non-negative tuples $(u,v)$. $n$ defaults to the largest $u+1$.
+- Edges are created for entries > 0 (or True).
+
 ```
-G = Pivoter.from_edge_list(array, n)
+G = pvt.from_edge_list(array, n=None)
 ```
 
+- Requires a $m \times 2$ edge list.
 
-Values available after construction.
+- All elements must be integer edge tuples $(u,v)$ such that $0 \le u,v < n$.
+
+- Number of nodes $n$ is inferred from the largest node provided. Used the argument `n` to set a larger value.
+
 ```
-G.neighborhoods
-G.degrees
-G.by_degrees
-G.degeneracy
-G.node_by_degen_order
-G.degen_order_by_node
-G.degen_order_nbhds
+G = pvt.from_networkx(graph)
 ```
+
+- Requires a NetworkX graph object.
+ 
 
 ## counting
 
-Multiprocessing is generally only beneficial for especially large or dense graphs.
+To get started, create simply call the `pivoter` method with a graph. Default arguments are shown for reference.
+```
+P = pvt.pivoter(
+    G, 
+    resolution='global', 
+    backend='python', 
+    procs=1, 
+    min_k=None, 
+    max_k=None
+)
+```
+## arguments
+`resolution`
+- one of `g[lobal]`, `v[ertex]`, or `e[dge]`.
+- because of how math works, global counts can be derived from vertex counts
+- the same applies to vertex from edge counts (and thus global from edge counts)
+- increasing the reslution does change the complexity class so be careful
 
+`backend`
+- one of `p[ython]` or `r[ust]`
+- multiprocessing and all resolutions are implemented for both backends
+
+`procs`
+- as many as you are willing to sacrifice for speed.
+- if `procs=0` and `backend='python'` then `mp.Pool` is skipped entirely
+ 
+`min_k`
+- only cliques of size $k \geq min_k$ will be counted
+- all counts with $k < min_k$ will be set to 0
+- the length of all counts list will be at least $min_k+1$
+
+`max_k`
+- only cliques of size $k \leq max_k$ will be counted
+
+> Note: If `min_k` or `max_k` are set, `P.vertex_ec`, `P.curvatures`, and `P.global_ec` will be still return values, although they will likely be incorrect.
+
+
+## results
+
+With `resolution='edge'` the below are available (including `vertex` and `global` results).
 ```
-G.count(procs=4) # default is 0 (avoids mp.Pool)
-G.count(vertex=True) # finds vertex counts
-G.count(edge=True) # finds edge counts
-G.count(rust=True) # uses Rust backend
+P.edge_counts   # dict of lists, keys are (u,v) with u < v
+```
+With `resolution='vertex'` the below are available (including `global` results).
+```
+P.vertex_counts # jagged list of lists of ints
+P.vertex_ec     # list of ints, alternating sum of counts
+P.curvatures    # list of floats
 ```
 
-Results available after completion:
+With `resolution='global'` the below are available.
 ```
-G.max_k         # max clique size
-G.global_ec     (alternating sum of counts)
-G.global_counts
+P.global_counts # list of ints
+P.global_ec     # int, alternating sum of counts
 ```
 
-if `vertex` is True:
-```
-G.vertex_ec   # also G.curvatures
-G.vertex_counts
-```
+
 
 # Extras
 
@@ -106,4 +146,18 @@ Large Sparse Real-World Graph](https://arxiv.org/pdf/1103.0318)
 
 - PyPivoter - Cython implementation by *rckormos*. ([code](https://github.com/rckormos/PyPivoter))
 
-- **pivoterpy** - parallelized pure Python implementation!
+- **pivoterpy** - a new and improved Python/Rust implementation!
+
+
+## citation
+Below is the preferred BibTeX citation for this repository.
+
+```
+@software{anderson_pivoterpy_2026,
+  author       = {Spencer Anderson},
+  title        = {{pivoterpy}},
+  year         = {2026},
+  version      = {2.0.0},
+  url          = {https://github.com/7e6i/pivoterpy}
+}
+```
