@@ -161,3 +161,10 @@ Below is the preferred BibTeX citation for this repository.
   url          = {https://github.com/7e6i/pivoterpy}
 }
 ```
+
+
+## experimental
+
+There is an experimental Rust backend available for `resolution='global'`. To access it, set `G.experimental=True` before calling `pivoter`.
+
+This code parallelizes work for each level 2 node in the SCT (rather than only level 1), and compresses the neighborhoods and degeneracy out neighborhoods for each node. This helps to reduce memory overhead taken up by unused vertices for each recursion path, and helps to balance the load by allowing for improved Rayon work-stealing.
