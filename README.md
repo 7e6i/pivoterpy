@@ -77,8 +77,8 @@ P = pvt.pivoter(
 - multiprocessing and all resolutions are implemented for both backends
 
 `procs`
-- as many as you are willing to sacrifice for speed.
-- if `procs=0` and `backend='python'` then `mp.Pool` is skipped entirely
+- parallelizes the recursion across the level 1 SCT nodes
+- if `procs=1` and `backend='python'` then `mp.Pool` is skipped entirely
  
 `min_k`
 - only cliques of size $k \geq min_k$ will be counted
