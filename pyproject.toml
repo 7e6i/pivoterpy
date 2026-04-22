@@ -4,7 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "pivoterpy"
-#version = "v.v.v" version is specified in Cargo.toml
+# version is specified in Cargo.toml
+dynamic = ["version"] 
 description = "Parallelized Python (and Rust) implementation of the Pivoter clique counting algorithm."
 readme = "README.md"
 requires-python = ">=3.8" 
