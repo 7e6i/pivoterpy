@@ -29,6 +29,7 @@ class PythonKernel:
     def __init__(self, G, resolution, procs, min_k, max_k):
         self.edges = G.edges
         self.n = G.n
+        self.degrees = G.degrees
 
         self.resolution = resolution
         self.procs = procs
@@ -65,14 +66,12 @@ class PythonKernel:
         """Builds neighborhoods, computes degeneracy ordering, and prunes roots."""
         
         # 1. Build initial neighborhoods and degree buckets
+        degrees = self.degrees.copy()
+
         self.nbhds = [set() for _ in range(self.n)]
-        degrees = [0] * self.n
-        
         for u, v in self.edges:
             self.nbhds[u].add(v)
             self.nbhds[v].add(u)
-            degrees[u] += 1
-            degrees[v] += 1
             
         by_degrees = [set() for _ in range(self.n)]
         for v, deg in enumerate(degrees):
@@ -193,7 +192,7 @@ class PythonKernel:
 
         elif self.resolution == "v":
             for v, incoming_list in counts.items():
-                target_list = self.vertex_counts[v]
+                target_list = self.vertex_counts.setdefault(v, [])
             
                 while len(target_list) < len(incoming_list):
                     target_list.append(0)
@@ -295,7 +294,7 @@ class PythonKernel:
 
 
     def _count_vertex(self):
-        self.vertex_counts = [[] for _ in range(self.n)]
+        self.vertex_counts = {}
 
         if self.procs == 1:
             for v in self.valid_roots:
