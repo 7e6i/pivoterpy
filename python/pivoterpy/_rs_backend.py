@@ -33,21 +33,21 @@ class RustKernel:
 
         if self.resolution == "g":
 
-            if self.experimental:
-                return pivoter_rust.count_global_exp(
-                    self.edges, self.n,  self.procs, self.min_k, self.max_k
-                )
+            # if self.experimental:
+            #     return pivoter_rust.count_global_exp(
+            #         self.edges, self.n,  self.procs, self.min_k, self.max_k
+            #     )
 
             return pivoter_rust.count_global(
                 self.edges, self.n,  self.procs, self.min_k, self.max_k
             )
             
-        elif self.resolution == "v":
-            return pivoter_rust.count_vertex(
-                self.edges, self.n, self.procs, self.min_k, self.max_k
-            )
+        # elif self.resolution == "v":
+        #     return pivoter_rust.count_vertex(
+        #         self.edges, self.n, self.procs, self.min_k, self.max_k
+        #     )
             
-        elif self.resolution == "e":
-            return pivoter_rust.count_edge(
-                self.edges, self.n, self.procs, self.min_k, self.max_k
-            )
+        # elif self.resolution == "e":
+        #     return pivoter_rust.count_edge(
+        #         self.edges, self.n, self.procs, self.min_k, self.max_k
+        #     )
