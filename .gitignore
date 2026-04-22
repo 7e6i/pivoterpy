@@ -6,3 +6,6 @@ pivoterpy.egg-info
 .pyc
 **.so
 target/
+
+
+**.edges
