@@ -1,17 +1,16 @@
 from collections.abc import Sequence
 
 class Graph:
-    """
-    A unified, immutable graph representation optimized for clique counting.
-    Calculates structural metadata (neighborhoods, k-core numbers) upon instantiation.
-    """
-    
-    __slots__ = ('edges', 'n', 'm', 'degrees', 'experimental')
+    # Add 'nodes' to store the original IDs
+    __slots__ = ('edges', 'n', 'm', 'degrees', 'nodes', 'experimental')
 
-    def __init__(self, edges: set[tuple[int, int]], n: int):
+    def __init__(self, edges: list[tuple[int, int]], n: int, nodes: list[int] = None):
         self.edges = edges
         self.n = n
         self.m = len(edges)
+        
+        # If no mapping is provided, assume it's already contiguous 0 to N-1
+        self.nodes = nodes if nodes is not None else list(range(n))
 
         self.degrees = [0] * self.n
         for u, v in self.edges:
@@ -19,7 +18,6 @@ class Graph:
             self.degrees[v] += 1
 
         self.experimental = None
-
 
     @classmethod
     def from_adj_matrix(cls, array: Sequence[Sequence[int | float | bool]]) -> 'Graph':
@@ -41,36 +39,41 @@ class Graph:
 
 
     @classmethod
-    def from_edge_list(cls, array: list[tuple[int, int]], n: int = None) -> 'Graph':
+    def from_edge_list(cls, array: list[tuple[int, int]]) -> 'Graph':
         """
         Creates a Graph from a list of (u, v) tuples. 
-        Ignores self-loops. Flips (v, u) with u < v to (u, v).
+        Compresses non-contiguous vertex IDs into a contiguous 0-N internal space.
         """
-        assert n is None or (isinstance(n, int) and n >= 1), "n must be None or a positive integer"
-
-        largest_u = -1
-        edges = set()
+        old_to_new = {}
+        new_to_old = []
+        internal_edges = set()
         
         for u, v in array:
             assert isinstance(u, int) and isinstance(v, int), "Node indices must be integers"
+            
+            if u == v:
+                continue  # Ignore self-loops
 
-            if n is None:
-                assert 0 <= u and 0 <= v,  "Invalid edge"
-            else:
-                assert 0 <= u < n and 0 <= v < n, "Invalid edge"
+            # Map U
+            if u not in old_to_new:
+                old_to_new[u] = len(new_to_old)
+                new_to_old.append(u)
+            
+            # Map V
+            if v not in old_to_new:
+                old_to_new[v] = len(new_to_old)
+                new_to_old.append(v)
+            
+            internal_u = old_to_new[u]
+            internal_v = old_to_new[v]
 
-            if u != v:  # Ignore self-loops
-                norm = (u, v) if u < v else (v, u)
-                edges.add(norm)
-                largest_u = max(largest_u, u, v)
-        
-        if n is None:
-            n = largest_u + 1
+            norm = (internal_u, internal_v) if internal_u < internal_v else (internal_v, internal_u)
+            internal_edges.add(norm)
+            
+        assert len(internal_edges) > 0, "No valid edges provided"
 
-        assert len(edges) > 0 or n is not None, "No edges and no n provided"
-
-        return cls(edges=list(edges), n=n)
-
+        return cls(edges=list(internal_edges), n=len(new_to_old), nodes=new_to_old)
+    
 
     @classmethod
     def from_networkx(cls, G: object) -> 'Graph':

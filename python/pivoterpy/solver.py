@@ -105,6 +105,7 @@ class pivoter:
 
         self._coarser_counts()
         self._cleanup()
+        self._remapping()
   
         return self
     
@@ -121,32 +122,36 @@ class pivoter:
 
         # 1. Edges to Vertices
         if self.resolution == "e" and self._edge_counts:
-            self._vertex_counts = [[] for _ in range(self.graph.n)]
+            self._vertex_counts = {} # <-- Change to dict
 
             for (u, v), e_list in self._edge_counts.items():
-                while len(self._vertex_counts[u]) < len(e_list): self._vertex_counts[u].append(0)
-                while len(self._vertex_counts[v]) < len(e_list): self._vertex_counts[v].append(0)
+                u_list = self._vertex_counts.setdefault(u, [])
+                v_list = self._vertex_counts.setdefault(v, [])
+                
+                while len(u_list) < len(e_list): u_list.append(0)
+                while len(v_list) < len(e_list): v_list.append(0)
 
                 # Only aggregate k >= 3
                 for k in range(3, len(e_list)):
-                    self._vertex_counts[u][k] += e_list[k]
-                    self._vertex_counts[v][k] += e_list[k]
+                    u_list[k] += e_list[k]
+                    v_list[k] += e_list[k]
 
-            # Correct overlap: divide by (k-1)
-            for v_list in self._vertex_counts:
+            # Correct overlap: use .values()
+            for v_list in self._vertex_counts.values():
                 for k in range(3, len(v_list)):
                     v_list[k] //= (k - 1)
 
         # 2. Vertices to Global
         if self.resolution in ("e", "v") and self._vertex_counts:
-            max_k = max((len(v_list) for v_list in self._vertex_counts), default=0)
+            # Add .values() here
+            max_k = max((len(v_list) for v_list in self._vertex_counts.values()), default=0)
             self._global_counts = [0] * max_k
 
-            for v_list in self._vertex_counts:
+            # Add .values() here too
+            for v_list in self._vertex_counts.values():
                 for k in range(3, len(v_list)):
                     self._global_counts[k] += v_list[k]
 
-            # Correct overlap: divide by k
             for k in range(3, len(self._global_counts)):
                 self._global_counts[k] //= k
 
@@ -170,9 +175,10 @@ class pivoter:
         # Clean Vertex counts if resolution is 'v' or 'e'
         # ---------------------------------------------------------
         if self.resolution in ('v', 'e'):
-            self._vertex_counts = self._vertex_counts or [[] for _ in range(self.graph.n)]
+            self._vertex_counts = self._vertex_counts or {}
             
-            for v, counts in enumerate(self._vertex_counts):
+            # Change enumerate to .items()
+            for v, counts in self._vertex_counts.items():
                 counts[0:3] = [1, 1, self.graph.degrees[v]]
                 counts[:tmp_min] = [0] * tmp_min
                 counts[:] = counts[:tmp_max + 1]
@@ -191,6 +197,28 @@ class pivoter:
                 counts[0:3] = [0, 0, 1]
                 counts[:tmp_min] = [0] * tmp_min
                 counts[:] = counts[:tmp_max + 1]
+
+
+    def _remapping(self):
+        # Translate Vertex Counts
+        if self.resolution in ('v', 'e') and isinstance(self._vertex_counts, list):
+            mapped_v_counts = {}
+            for internal_id, counts in self._vertex_counts.items():
+                original_id = self.graph.nodes[internal_id]
+                mapped_v_counts[original_id] = counts
+            self._vertex_counts = mapped_v_counts
+
+        # Translate Edge Counts
+        if self.resolution == 'e' and isinstance(self._edge_counts, dict):
+            mapped_e_counts = {}
+            for (internal_u, internal_v), counts in self._edge_counts.items():
+                original_u = self.graph.nodes[internal_u]
+                original_v = self.graph.nodes[internal_v]
+                
+                # Ensure the original edge is properly ordered
+                norm_e = (original_u, original_v) if original_u < original_v else (original_v, original_u)
+                mapped_e_counts[norm_e] = counts
+            self._edge_counts = mapped_e_counts
 
 
 #  ██████  ██       ██████  ██████   █████  ██      
@@ -238,15 +266,16 @@ class pivoter:
 
         v_ec = None
         if self._vertex_counts:
-            v_ec = [0] * self.graph.n
+            v_ec = {} # <-- Init as dict
             
-            for v, counts in enumerate(self._vertex_counts):
+            # Change enumerate to .items()
+            for v, counts in self._vertex_counts.items():
                 ec = 0
                 for k, count in enumerate(counts):
                     if k == 0 or count == 0:
                         continue
                     ec += ((-1) ** (k + 1)) * count
-                v_ec[v] = ec
+                v_ec[v] = ec # <-- Assign to dict key
     
         return v_ec
 
@@ -256,15 +285,16 @@ class pivoter:
 
         v_curv = None
         if self._vertex_counts:
-            v_curv = [0.0] * self.graph.n
+            v_curv = {} # <-- Init as dict
 
-            for v, counts in enumerate(self.vertex_counts):
+            # Change enumerate to .items()
+            for v, counts in self._vertex_counts.items():
                 curv = 0.0
                 for k, count in enumerate(counts):
                     if k == 0 or count == 0:
                         continue
                     curv += ((-1) ** (k + 1)) * (count / k)
-                v_curv[v] = curv
+                v_curv[v] = curv # <-- Assign to dict key
             
         return v_curv
 
