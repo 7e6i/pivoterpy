@@ -39,7 +39,6 @@ dev = [
     "maturin>=1.0,<2.0",
     "networkx>=3.0",
     "numpy>=2.0",
-    "mkdocs-material>=9.0",
     "patchelf>=0.17.2.4"
 ]
 
