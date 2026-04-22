@@ -65,41 +65,112 @@ pub fn setup_graph(
     println!("Adjacency Build: {:.3}s", phase1_start.elapsed().as_secs_f64());
     let phase2_start = Instant::now();
 
+    // // ---------------------------------------------------------
+    // // 2. Matula-Beck Degeneracy Ordering O(m)
+    // // ---------------------------------------------------------
+    // let mut degen_ranks = vec![0; n]; // degen_ranks[v] = rank of v
+    // let mut core_numbers = vec![0; n];
+    // let mut degeneracy = 0;
+    // let mut min_deg = 0;
+    // let mut processed = vec![false; n];
+
+    // for rank in 0..n {
+    //     while min_deg < n && by_degrees[min_deg].is_empty() {
+    //         min_deg += 1;
+    //     }
+
+    //     let v = by_degrees[min_deg].pop().unwrap();
+    //     processed[v] = true;
+    //     degen_ranks[v] = rank;
+
+    //     degeneracy = std::cmp::max(degeneracy, min_deg);
+    //     core_numbers[v] = degeneracy;
+
+    //     // Iterate over the dynamically sized list instead of a bitset
+    //     for &w in &nbhds[v] {
+    //         if !processed[w] {
+    //             let old_deg = degrees[w];
+    //             if let Some(pos) = by_degrees[old_deg].iter().position(|&x| x == w) {
+    //                 by_degrees[old_deg].swap_remove(pos);
+    //             }
+    //             degrees[w] -= 1;
+    //             let new_deg = degrees[w];
+    //             by_degrees[new_deg].push(w);
+
+    //             if new_deg < min_deg {
+    //                 min_deg = new_deg;
+    //             }
+    //         }
+    //     }
+    // }
+
     // ---------------------------------------------------------
-    // 2. Matula-Beck Degeneracy Ordering O(m)
+    // 2. Batagelj-Zaversnik Degeneracy Ordering O(V + E)
     // ---------------------------------------------------------
-    let mut degen_ranks = vec![0; n]; // degen_ranks[v] = rank of v
+    
+    let mut max_deg = 0;
+    for &d in &degrees {
+        if d > max_deg { max_deg = d; }
+    }
+
+    let mut bin = vec![0; max_deg + 1];
+    for &d in &degrees {
+        bin[d] += 1;
+    }
+    
+    let mut start = 0;
+    for d in 0..=max_deg {
+        let num = bin[d];
+        bin[d] = start;
+        start += num;
+    }
+
+    let mut vert = vec![0; n];
+    let mut pos = vec![0; n];
+    for v in 0..n {
+        let d = degrees[v];
+        let p = bin[d];
+        vert[p] = v;
+        pos[v] = p;
+        bin[d] += 1;
+    }
+
+    for d in (1..=max_deg).rev() {
+        bin[d] = bin[d - 1];
+    }
+    bin[0] = 0;
+
+    let mut degen_ranks = vec![0; n];
     let mut core_numbers = vec![0; n];
     let mut degeneracy = 0;
-    let mut min_deg = 0;
-    let mut processed = vec![false; n];
 
-    for rank in 0..n {
-        while min_deg < n && by_degrees[min_deg].is_empty() {
-            min_deg += 1;
-        }
-
-        let v = by_degrees[min_deg].pop().unwrap();
-        processed[v] = true;
-        degen_ranks[v] = rank;
-
-        degeneracy = std::cmp::max(degeneracy, min_deg);
+    // The peeling process
+    for i in 0..n {
+        let v = vert[i];
+        let v_deg = degrees[v]; // BZ guarantees this is now exactly the core number!
+        
+        degeneracy = std::cmp::max(degeneracy, v_deg);
         core_numbers[v] = degeneracy;
+        degen_ranks[v] = i;
 
-        // Iterate over the dynamically sized list instead of a bitset
-        for &w in &nbhds[v] {
-            if !processed[w] {
-                let old_deg = degrees[w];
-                if let Some(pos) = by_degrees[old_deg].iter().position(|&x| x == w) {
-                    by_degrees[old_deg].swap_remove(pos);
-                }
-                degrees[w] -= 1;
-                let new_deg = degrees[w];
-                by_degrees[new_deg].push(w);
+        for &u in &nbhds[v] {
+            // THE FIX: Strictly > prevents underflow and duplicate processing
+            if degrees[u] > degrees[v] {
+                let u_deg = degrees[u];
+                let u_pos = pos[u];
+                let bin_start = bin[u_deg];
 
-                if new_deg < min_deg {
-                    min_deg = new_deg;
+                let w = vert[bin_start];
+                
+                if u != w {
+                    vert[u_pos] = w;
+                    pos[w] = u_pos;
+                    vert[bin_start] = u;
+                    pos[u] = bin_start;
                 }
+
+                bin[u_deg] += 1;
+                degrees[u] -= 1;
             }
         }
     }
