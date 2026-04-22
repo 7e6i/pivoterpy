@@ -19,17 +19,17 @@ def read_file(filename):
 
 
 def main():
-    edges = read_file('tests/com-dblp.ungraph.txt')
+    edges = read_file('tests/as-skitter.edges')
 
 
     G = pvt.from_edge_list(edges)
-
+    print("loaded graph")
 
     t0 = time()
-    P = pvt.pivoter(G, procs=8, backend='rust', max_k=10)
+    P = pvt.pivoter(G, procs=8, backend='rust', min_k=0, max_k=4)
     print(f'{time() - t0:.3f} seconds')
 
-    print(len(P.global_counts)-1)
+    print(P.global_counts)
 
 
 

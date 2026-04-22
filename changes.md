@@ -10,8 +10,10 @@
 
 - rust global level 1 recursion uses a compressed bitset
 
+- swapped matula-beck for batagelj-zaversnik degeneracy ordering algorithm
 
 # todo
 
 - make new tests for vertex counts (since it is a dict now)
 
+- reimplement the rust vertex and edge count function with new logic (from global)
