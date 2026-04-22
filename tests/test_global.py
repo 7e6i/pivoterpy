@@ -22,8 +22,8 @@ def karate_graph():
 
 
 def test_singleton():
-    n, edges, counts = 2, [(0,1)], [1,2,1]
-    G = pvt.from_edge_list(edges, n=n)
+    n, edges, counts = 2, [(0,int(1e100))], [1,2,1]
+    G = pvt.from_edge_list(edges)
 
     P = pvt.pivoter(G)
     assert P.global_counts == counts
