@@ -201,7 +201,7 @@ class pivoter:
 
     def _remapping(self):
         # Translate Vertex Counts
-        if self.resolution in ('v', 'e') and isinstance(self._vertex_counts, list):
+        if self.resolution in ('v', 'e') and isinstance(self._vertex_counts, dict):
             mapped_v_counts = {}
             for internal_id, counts in self._vertex_counts.items():
                 original_id = self.graph.nodes[internal_id]
