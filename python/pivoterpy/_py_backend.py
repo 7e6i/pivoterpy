@@ -11,12 +11,31 @@ def init_worker():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 class SCTnode:
-    __slots__ = ('label', 'ph_cnt', 'ph_chn')
+    """
+    Represents a node in the Search-and-Count Tree (SCT) for global clique counting.
+    
+    Attributes:
+        label (set[int]): The set of available vertices for further expansion.
+        ph_cnt (tuple[int, int]): A tuple tracking (pivot nodes count, hold nodes count).
+    """
+    __slots__ = ('label', 'ph_cnt')
     def __init__(self, label, ph_cnt):
         self.label = label # set of vertices
         self.ph_cnt = ph_cnt # (pivot nodes, hold nodes)
 
 class SCTnode_chn:
+    """
+    Represents a node in the Search-and-Count Tree (SCT) for local (vertex/edge) clique counting.
+    
+    In addition to basic counting, it tracks the history of pivot and hold assignments
+    required to attribute specific clique combinations to precise vertices or edges.
+    
+    Attributes:
+        label (set[int]): The set of available vertices for further expansion.
+        ph_cnt (tuple[int, int]): A tuple tracking (pivot nodes count, hold nodes count).
+        ph_chn (tuple | None): A linked list-like tuple representing the chain of assignments, 
+                               structured as ((node, is_pivot), parent_chain).
+    """
     __slots__ = ('label', 'ph_cnt', 'ph_chn')
     def __init__(self, label, ph_cnt, ph_chn):
         self.label = label
@@ -25,8 +44,25 @@ class SCTnode_chn:
 
 
 class PythonKernel:
+    """
+    The pure Python execution backend for the Pivoter algorithm.
+    
+    This class handles the core logic of graph degeneracy ordering, 
+    Succinct Clique Tree (SCT) exploration, and multiprocessing dispatch 
+    to calculate exact clique counts at the requested resolution.
+    """
 
     def __init__(self, G, resolution, procs, min_k, max_k):
+        """
+        Initializes the Python kernel and prepares the graph for processing.
+        
+        Args:
+            G (Graph): The pre-processed graph object.
+            resolution (str): The desired output resolution ('g', 'v', or 'e').
+            procs (int): The number of parallel processes to use.
+            min_k (int | None): The minimum clique size to compute.
+            max_k (int | None): The maximum clique size to compute.
+        """
         self.edges = G.edges
         self.n = G.n
         self.degrees = G.degrees
@@ -42,17 +78,33 @@ class PythonKernel:
 
 
     def execute(self):
+
         if self.resolution == "g":
-            self._count_global()
-            return self.global_counts
-        
+            self._counts = []
+            _branch = self._branch_global
         elif self.resolution == "v":
-            self._count_vertex()
-            return self.vertex_counts
-        
+            self._counts = {}
+            _branch = self._branch_vertex
         elif self.resolution == "e":
-            self._count_edge()
-            return self.edge_counts
+            self._counts = {e: [] for e in self.edges}
+            _branch = self._branch_edge
+
+        if self.procs == 1:
+            for v in self.valid_roots:
+                counts = _branch(v)
+                self._aggregate(counts)
+        else:
+            with Pool(processes=self.procs, initializer=init_worker) as pool:
+                try:
+                    for counts in pool.imap_unordered(_branch, self.valid_roots, chunksize=self.chunk_size):
+                        self._aggregate(counts)
+                except KeyboardInterrupt:
+                    pool.terminate()
+                    raise
+
+
+        return self._counts
+
 
 
 # ███████ ███████ ████████ ██    ██ ██████  
@@ -63,7 +115,18 @@ class PythonKernel:
 
 
     def _setup_graph(self):
-        """Builds neighborhoods, computes degeneracy ordering, and prunes roots."""
+        """
+        Builds neighborhoods, computes degeneracy ordering, and prunes the search space.
+
+        This initialization phase performs three main tasks:
+        1. Constructs the full adjacency sets (neighborhoods) for the graph.
+        2. Computes the Matula-Beck degeneracy ordering (core numbers) in O(m) time.
+           This helps bound the maximum possible clique size (`max_k`).
+        3. Prunes the search space by dropping vertices that cannot possibly belong 
+           to a clique of size `min_k` (i.e., vertices not in the `(min_k - 1)`-core).
+           It then builds directed degeneracy neighborhoods (`degen_nbhds`) containing
+           only valid forward neighbors in the ordering to avoid duplicate counting.
+        """
         
         # 1. Build initial neighborhoods and degree buckets
         degrees = self.degrees.copy()
@@ -139,8 +202,17 @@ class PythonKernel:
 # ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████ 
 
 
-    def _choose_pivot(self, S):
-        """Finds the optimal pivot"""
+    def _choose_pivot(self, S: set[int]):
+        """
+        Finds the optimal pivot within a candidate set `S`.
+
+        The pivot is chosen as the vertex in `S` that has the maximum number of
+        neighbors also within `S`. This heuristic helps to maximize the size of
+        the subproblem in the pivot branch, effectively pruning the search space.
+
+        Args:
+            S (set[int]): The set of candidate vertices.
+        """
         pivot = None
         max_nbhd = -1
         max_possible = len(S) -1
@@ -158,7 +230,19 @@ class PythonKernel:
     
 
     def _unpack_chain(self, chain_tuple) -> tuple[list[int], list[int]]:
-        """Flattens a single tuple chain into a list of vertices."""
+        """
+        Flattens a recursive tuple chain into separate lists of pivot and hold vertices.
+
+        The chain is a linked-list-like structure `((vertex, type), parent_chain)`
+        used in local counting to track the history of assignments down a recursion path.
+        This function unpacks it into two flat lists for easier processing at leaf nodes.
+
+        Args:
+            chain_tuple (tuple | None): The head of the assignment chain.
+
+        Returns:
+            tuple[list[int], list[int]]: A tuple containing (pivot_list, hold_list).
+        """
         if chain_tuple is None:
             return [], []
             
@@ -175,14 +259,26 @@ class PythonKernel:
 
 
     def _edge(self, u: int, v: int):
-        """Returns normalized edges such that u < v"""
+        """
+        Returns a normalized edge tuple where the first element is smaller.
+
+        This ensures that edge tuples can be used consistently as dictionary keys,
+        treating `(u, v)` and `(v, u)` as the same edge.
+        """
         return (u, v) if u < v else (v, u)
     
 
     def _aggregate(self, counts) -> None:
+        """
+        Aggregates partial results from a worker into the main count containers.
+
+        This method dispatches based on the configured resolution, adding the
+        computed counts from a single root's search tree into the final
+        `global_counts`, `vertex_counts`, or `edge_counts` attributes.
+        """
 
         if self.resolution == "g":
-            target_list = self.global_counts
+            target_list = self._counts
             
             while len(target_list) < len(counts):
                 target_list.append(0)
@@ -192,7 +288,7 @@ class PythonKernel:
 
         elif self.resolution == "v":
             for v, incoming_list in counts.items():
-                target_list = self.vertex_counts.setdefault(v, [])
+                target_list = self._counts.setdefault(v, [])
             
                 while len(target_list) < len(incoming_list):
                     target_list.append(0)
@@ -203,13 +299,15 @@ class PythonKernel:
         # exact same as vertex
         elif self.resolution == "e":
             for e, incoming_list in counts.items():
-                target_list = self.edge_counts[e]
+                target_list = self._counts[e]
         
                 while len(target_list) < len(incoming_list):
                     target_list.append(0)
                     
                 for k, count in enumerate(incoming_list):
                     target_list[k] += count
+
+
 
 
 
@@ -220,24 +318,21 @@ class PythonKernel:
 #  ██████  ███████  ██████  ██████  ██   ██ ███████ 
 
 
-    def _count_global(self):
-        self.global_counts = []
-
-        if self.procs == 1:
-            for v in self.valid_roots:
-                counts = self._branch_global(v)
-                self._aggregate(counts)
-        else:
-            with Pool(processes=self.procs, initializer=init_worker) as pool:
-                try:
-                    for counts in pool.imap_unordered(self._branch_global, self.valid_roots, chunksize=self.chunk_size):
-                        self._aggregate(counts)
-                except KeyboardInterrupt:
-                    pool.terminate()
-                    raise
-
-
     def _branch_global(self, v: int) -> list[int]:
+        """
+        Explores the SCT for a given root vertex.
+
+        This method implements the core Pivoter algorithm recursion using a 
+        generator-based depth-first search (DFS) to avoid recursion limit 
+        issues. It efficiently counts cliques by implicitly representing them 
+        at leaf nodes using combinations (`math.comb`).
+
+        Args:
+            v (int): The internal ID of the root vertex to explore.
+
+        Returns:
+            list[int]: A list where the index `k` represents the number of k-cliques found.
+        """
         g_counts = defaultdict(int) # could be a list
 
         def child_generator(ego):
@@ -293,23 +388,20 @@ class PythonKernel:
 #   ████   ███████ ██   ██    ██    ███████ ██   ██ 
 
 
-    def _count_vertex(self):
-        self.vertex_counts = {}
+    def _branch_vertex(self, v: int) -> dict[int, list[int]]:
+        """
+        Explores the SCT for a given root vertex to compute local vertex counts.
 
-        if self.procs == 1:
-            for v in self.valid_roots:
-                counts = self._branch_vertex(v)
-                self._aggregate(counts)
-        else:
-            with Pool(processes=self.procs, initializer=init_worker) as pool:
-                try:
-                    for counts in pool.imap_unordered(self._branch_vertex, self.valid_roots, chunksize=self.chunk_size):
-                        self._aggregate(counts)
-                except KeyboardInterrupt:
-                    pool.terminate()
-                    raise
+        This method tracks the history of pivot and hold assignments down the 
+        recursion path. At the leaf nodes, it uses combinations to correctly 
+        attribute the implicit cliques to specific vertices.
 
-    def _branch_vertex(self, v: int) -> dict[list]:
+        Args:
+            v (int): The internal ID of the root vertex to explore.
+
+        Returns:
+            dict[int, list[int]]: A dictionary mapping vertex IDs to their respective clique counts.
+        """
         v_counts = defaultdict(lambda: defaultdict(int))
 
         def child_generator(ego):
@@ -379,24 +471,6 @@ class PythonKernel:
 # █████   ██   ██ ██   ███ █████   
 # ██      ██   ██ ██    ██ ██      
 # ███████ ██████   ██████  ███████ 
-
-# so much duplicate code, too bad
-
-    def _count_edge(self):
-        self.edge_counts = {e: [] for e in self.edges}
-
-        if self.procs == 1:
-            for v in self.valid_roots:
-                counts = self._branch_edge(v)
-                self._aggregate(counts)
-        else:
-            with Pool(processes=self.procs, initializer=init_worker) as pool:
-                try:
-                    for counts in pool.imap_unordered(self._branch_edge, self.valid_roots, chunksize=self.chunk_size):
-                        self._aggregate(counts)
-                except KeyboardInterrupt:
-                    pool.terminate()
-                    raise
 
 
     def _branch_edge(self, v: int) -> dict[list]:
@@ -480,5 +554,3 @@ class PythonKernel:
             e: [counts.get(k, 0) for k in range(max(counts) + 1)]
             for e, counts in e_counts.items()
         } if e_counts else {}
-
-
