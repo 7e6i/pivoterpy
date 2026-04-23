@@ -3,7 +3,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 use fixedbitset::FixedBitSet;
-use num_bigint::{BigUint, ToBigUint};
+use num_bigint::BigUint;
 use num_traits::{Zero, One};
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -198,20 +198,40 @@ pub fn setup_graph(
 }
 
 
-#[inline]
-pub fn ncr(n: usize, k: usize) -> BigUint {
-    if k > n { return BigUint::zero(); }
-    if k == 0 || k == n { return BigUint::one(); }
+// #[inline]
+// pub fn ncr(n: usize, k: usize) -> BigUint {
+//     if k > n { return BigUint::zero(); }
+//     if k == 0 || k == n { return BigUint::one(); }
     
-    let k = std::cmp::min(k, n - k);
-    let mut res = BigUint::one();
+//     let k = std::cmp::min(k, n - k);
+//     let mut res = BigUint::one();
     
-    for i in 1..=k {
-        // Multiply first, then divide, using BigUint to prevent overflow
-        res = res * (n - i + 1).to_biguint().unwrap();
-        res = res / i.to_biguint().unwrap();
+//     for i in 1..=k {
+//         // Multiply first, then divide, using BigUint to prevent overflow
+//         res = res * (n - i + 1).to_biguint().unwrap();
+//         res = res / i.to_biguint().unwrap();
+//     }
+//     res
+// }
+
+
+fn precompute_ncr(n: usize, max_k: usize) -> Vec<Vec<BigUint>> {
+    let mut table = vec![vec![BigUint::zero(); max_k + 1]; n + 1];
+    
+    for i in 0..=n {
+        table[i][0] = BigUint::one();
+        for j in 1..=std::cmp::min(i, max_k) {
+            if i == j {
+                table[i][j] = BigUint::one();
+            } else {
+                // Pascal's identity: C(i, j) = C(i-1, j-1) + C(i-1, j)
+                let prev1 = table[i - 1][j - 1].clone();
+                let prev2 = table[i - 1][j].clone();
+                table[i][j] = prev1 + prev2;
+            }
+        }
     }
-    res
+    table
 }
 
 
@@ -243,6 +263,8 @@ pub fn count_global(
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
         setup_graph(&edges, n, min_k, max_k);
 
+    let max_p = compressed_degen_nbhds.iter().map(|nbhd| nbhd.len()).max().unwrap_or(0);
+
     let v_prime = valid_roots.len();
 
     // 2. Setup the Cancellation Token & Channel
@@ -257,8 +279,11 @@ pub fn count_global(
         let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
         
         let parallel_counts = pool.install(|| {
+            let ncr_table = precompute_ncr(max_p, effective_max_k);
+
             (0..v_prime)
                 .into_par_iter()
+                .rev()
                 .map(|new_v| {
                     let cands = &compressed_degen_nbhds[new_v];
                     let num_cands = cands.len();
@@ -290,7 +315,8 @@ pub fn count_global(
                         &local_nbhds, 
                         min_k, 
                         effective_max_k,
-                        &cancel_worker 
+                        &cancel_worker,
+                        &ncr_table
                     )
                 })
                 .reduce(
@@ -349,6 +375,7 @@ fn branch_global(
     min_k: usize,
     max_k: usize,
     cancel_flag: &AtomicBool,
+    ncr_table: &Vec<Vec<BigUint>>
 ) -> Vec<BigUint> {
 
     let mut local_counts = vec![BigUint::zero(); max_k + 1];
@@ -376,7 +403,8 @@ fn branch_global(
                 for i in 0..=max_i {
                     let k = h + i;
                     if k >= min_k && k <= max_k {
-                        local_counts[k] += ncr(p, i);
+                        //local_counts[k] += ncr(p, i);
+                        local_counts[k] += &ncr_table[p][i];
                     }
                 }
             }
@@ -454,6 +482,8 @@ pub fn count_vertex(
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
         setup_graph(&edges, n, min_k, max_k);
 
+    let max_p = compressed_degen_nbhds.iter().map(|nbhd| nbhd.len()).max().unwrap_or(0);
+
     let v_prime = valid_roots.len();
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_worker = Arc::clone(&cancel); 
@@ -463,8 +493,11 @@ pub fn count_vertex(
         let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
 
         let parallel_results = pool.install(|| {
+            let ncr_table = precompute_ncr(max_p, effective_max_k);
+
             (0..v_prime)
                 .into_par_iter()
+                .rev()
                 .map(|new_v| {
                     let cands = &compressed_degen_nbhds[new_v];
                     let num_cands = cands.len();
@@ -501,7 +534,8 @@ pub fn count_vertex(
                         cands, // Pass translation array
                         min_k, 
                         effective_max_k,
-                        &cancel_worker 
+                        &cancel_worker,
+                        &ncr_table
                     )
                 })
                 .fold(
@@ -568,7 +602,8 @@ fn branch_vertex(
     cands: &[usize], // <-- Used to translate local IDs back to v_prime
     min_k: usize,
     max_k: usize,
-    cancel_flag: &AtomicBool 
+    cancel_flag: &AtomicBool,
+    ncr_table: &Vec<Vec<BigUint>>
 ) -> HashMap<usize, Vec<BigUint>> {
 
     let mut local_counts = HashMap::new();
@@ -591,22 +626,23 @@ fn branch_vertex(
                 for i in 0..=max_i {
                     let k = h + i;
                     if k >= min_k && k <= max_k {
-                        let ncr_0 = ncr(p, i);
+                        let ncr_0 = &ncr_table[p][i];
                         
                         if !ncr_0.is_zero() {
                             for &v_hold in &hv {
                                 let target = local_counts.entry(v_hold).or_insert_with(|| vec![BigUint::zero(); max_k + 1]);
-                                target[k] += &ncr_0;
+                                target[k] += ncr_0;
                             }
                             
                             if i > 0 && p > 0 {
-                                let mut ncr_p = &ncr_0 * i.to_biguint().unwrap();
-                                ncr_p /= p.to_biguint().unwrap();
+                                // let mut ncr_p = &ncr_0 * i.to_biguint().unwrap();
+                                // ncr_p /= p.to_biguint().unwrap();
+                                let ncr_p = &ncr_table[p - 1][i - 1];
                                 
                                 if !ncr_p.is_zero() {
                                     for &v_pivot in &pv {
                                         let target = local_counts.entry(v_pivot).or_insert_with(|| vec![BigUint::zero(); max_k + 1]);
-                                        target[k] += &ncr_p;
+                                        target[k] += ncr_p;
                                     }
                                 }
                             }
@@ -686,6 +722,8 @@ pub fn count_edge(
     
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
         setup_graph(&edges, n, min_k, max_k);
+    
+    let max_p = compressed_degen_nbhds.iter().map(|nbhd| nbhd.len()).max().unwrap_or(0);
 
     let v_prime = valid_roots.len();
     let cancel = Arc::new(AtomicBool::new(false));
@@ -696,6 +734,7 @@ pub fn count_edge(
         let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
 
         let compressed_results = pool.install(|| {
+            let ncr_table = precompute_ncr(max_p, effective_max_k);
             (0..v_prime)
                 .into_par_iter()
                 .map(|new_v| {
@@ -718,21 +757,14 @@ pub fn count_edge(
                     let mut initial_label = FixedBitSet::with_capacity(num_cands);
                     initial_label.insert_range(..);
 
-                    let root_node = SCTnodeChn {
-                        label: initial_label,
-                        p: 0,
-                        h: 1,
-                        pv: Vec::new(),
-                        hv: vec![new_v],
-                    };
-
                     branch_edge(
-                        root_node, 
+                        SCTnodeChn {label: initial_label, p: 0, h: 1, pv: Vec::new(), hv: vec![new_v]}, 
                         &local_nbhds, 
                         cands, 
                         min_k, 
                         effective_max_k,
-                        &cancel_worker 
+                        &cancel_worker,
+                        &ncr_table
                     )
                 })
                 .fold(
@@ -802,7 +834,8 @@ fn branch_edge(
     cands: &[usize], 
     min_k: usize,
     max_k: usize,
-    cancel_flag: &AtomicBool 
+    cancel_flag: &AtomicBool,
+    ncr_table: &Vec<Vec<BigUint>>
 ) -> HashMap<(usize, usize), Vec<BigUint>> {
 
     let mut local_counts = HashMap::new();
@@ -826,16 +859,16 @@ fn branch_edge(
                     let k = h + i;
                     if k < min_k || k < 2 || k > max_k { continue; }
 
-                    let ncr_0 = ncr(p, i);
-                    let ncr_1 = if i > 0 && p > 0 { (&ncr_0 * i.to_biguint().unwrap()) / p.to_biguint().unwrap() } else { BigUint::zero() };
-                    let ncr_2 = if i > 1 && p > 1 { (&ncr_1 * (i - 1).to_biguint().unwrap()) / (p - 1).to_biguint().unwrap() } else { BigUint::zero() };
+                    let ncr_0 = &ncr_table[p][i];
+                    let ncr_1 = if p > 0 && i > 0 { &ncr_table[p - 1][i - 1] } else { &ncr_table[0][0] };
+                    let ncr_2 = if p > 1 && i > 1 { &ncr_table[p - 2][i - 2] } else { &ncr_table[0][0] };
 
                     if !ncr_0.is_zero() && hv.len() >= 2 {
                         for x in 0..hv.len() {
                             for y in (x + 1)..hv.len() {
                                 let e = normalize_edge(hv[x], hv[y]);
                                 let target = local_counts.entry(e).or_insert_with(|| vec![BigUint::zero(); max_k + 1]);
-                                target[k] += &ncr_0;
+                                target[k] += ncr_0;
                             }
                         }
                     }
@@ -845,7 +878,7 @@ fn branch_edge(
                             for &n2 in &pv {
                                 let e = normalize_edge(n1, n2);
                                 let target = local_counts.entry(e).or_insert_with(|| vec![BigUint::zero(); max_k + 1]);
-                                target[k] += &ncr_1;
+                                target[k] += ncr_1;
                             }
                         }
                     }
@@ -855,7 +888,7 @@ fn branch_edge(
                             for y in (x + 1)..pv.len() {
                                 let e = normalize_edge(pv[x], pv[y]);
                                 let target = local_counts.entry(e).or_insert_with(|| vec![BigUint::zero(); max_k + 1]);
-                                target[k] += &ncr_2;
+                                target[k] += ncr_2;
                             }
                         }
                     }
