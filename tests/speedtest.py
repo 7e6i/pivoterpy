@@ -20,17 +20,18 @@ def read_file(filename):
 
 def main():
     files = ['com-dblp', 'as-skitter']
-    edges = read_file(f'tests/{files[0]}.edges')
+    edges = read_file(f'tests/{files[1]}.edges')
 
-
-    G = pvt.from_edge_list(edges)
-    print("loaded graph")
 
     t0 = time()
-    P = pvt.pivoter(G, procs=10, backend='rust')#, min_k=11, max_k=11)
+    G = pvt.from_edge_list(edges)
+    print(f"loaded: {time() - t0:.3f}")
+
+    t0 = time()
+    P = pvt.pivoter(G, procs=10, backend='rust')
     print(f'{time() - t0:.3f} seconds')
 
-    print(P.global_counts)
+    #print(P.global_counts)
 
 
 
