@@ -27,7 +27,7 @@ global_counts:
     - 4 <= len <= maximal clique +1
 
 vertex_counts
-    - jagged list of lists
+    - dict of jagged lists
     - n rows
     - each count list conforms to global count specs
 

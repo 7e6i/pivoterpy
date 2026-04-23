@@ -28,7 +28,7 @@ def main():
     print(f"loaded: {time() - t0:.3f}")
 
     t0 = time()
-    P = pvt.pivoter(G, procs=10, backend='rust')
+    P = pvt.pivoter(G, procs=8, backend='rust', resolution='g', min_k=11,max_k=11)
     print(f'{time() - t0:.3f} seconds')
 
     #print(P.global_counts)
@@ -38,3 +38,6 @@ def main():
 if __name__ == "__main__":
     main()
 
+# 8 threads - global, vertex, edge (seconds)
+# com-dblp - 0.494, 3.426, 19.925
+# as-skitter - 33, 137, no
