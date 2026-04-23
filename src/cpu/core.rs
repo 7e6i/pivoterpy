@@ -4,236 +4,13 @@ use std::collections::HashMap;
 
 use fixedbitset::FixedBitSet;
 use num_bigint::BigUint;
-use num_traits::{Zero, One};
+use num_traits::Zero;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
-use std::time::{Instant, Duration};
+use std::time::Duration;
 
-
-struct SCTnode {
-    label: FixedBitSet,
-    p: usize,
-    h: usize,
-}
-
-struct SCTnodeChn {
-    label: FixedBitSet,
-    p: usize,
-    h: usize,
-    pv: Vec<usize>,
-    hv: Vec<usize>,
-}
-
-
-
-
-// ███████ ███████ ████████ ██    ██ ██████  
-// ██      ██         ██    ██    ██ ██   ██ 
-// ███████ █████      ██    ██    ██ ██████  
-//      ██ ██         ██    ██    ██ ██      
-// ███████ ███████    ██     ██████  ██  
-
-
-pub fn setup_graph(
-    edges: &[(usize, usize)],
-    n: usize,
-    min_k: usize,
-    max_k: usize,
-) -> (Vec<Vec<usize>>, Vec<Vec<usize>>, Vec<usize>, usize) {
-    let total_start = Instant::now();
-    let phase1_start = Instant::now();
-    
-    // ---------------------------------------------------------
-    // 1. Build initial neighborhoods and degree buckets
-    // ---------------------------------------------------------
-    let mut nbhds: Vec<Vec<usize>> = vec![vec![]; n];
-    let mut degrees = vec![0; n];
-
-    for &(u, v) in edges {
-        nbhds[u].push(v);
-        nbhds[v].push(u);
-        degrees[u] += 1;
-        degrees[v] += 1;
-    }
-
-    let mut by_degrees = vec![vec![]; n];
-    for (v, &deg) in degrees.iter().enumerate() {
-        by_degrees[deg].push(v);
-    }
-
-    println!("Adjacency Build: {:.3}s", phase1_start.elapsed().as_secs_f64());
-    let phase2_start = Instant::now();
-
-    // ---------------------------------------------------------
-    // 2. Batagelj-Zaversnik Degeneracy Ordering O(V + E)
-    // ---------------------------------------------------------
-    
-    let mut max_deg = 0;
-    for &d in &degrees {
-        if d > max_deg { max_deg = d; }
-    }
-
-    let mut bin = vec![0; max_deg + 1];
-    for &d in &degrees {
-        bin[d] += 1;
-    }
-    
-    let mut start = 0;
-    for d in 0..=max_deg {
-        let num = bin[d];
-        bin[d] = start;
-        start += num;
-    }
-
-    let mut vert = vec![0; n];
-    let mut pos = vec![0; n];
-    for v in 0..n {
-        let d = degrees[v];
-        let p = bin[d];
-        vert[p] = v;
-        pos[v] = p;
-        bin[d] += 1;
-    }
-
-    for d in (1..=max_deg).rev() {
-        bin[d] = bin[d - 1];
-    }
-    bin[0] = 0;
-
-    let mut degen_ranks = vec![0; n];
-    let mut core_numbers = vec![0; n];
-    let mut degeneracy = 0;
-
-    // The peeling process
-    for i in 0..n {
-        let v = vert[i];
-        let v_deg = degrees[v]; 
-        
-        degeneracy = std::cmp::max(degeneracy, v_deg);
-        core_numbers[v] = degeneracy;
-        degen_ranks[v] = i;
-
-        for &u in &nbhds[v] {
-            // THE FIX: Check array position, NOT degree!
-            // If u is further to the right in the array, it hasn't been peeled yet.
-            if degrees[u] > degrees[v] {
-                let u_deg = degrees[u];
-                let u_pos = pos[u];
-                let bin_start = bin[u_deg];
-
-                let w = vert[bin_start];
-                
-                if u != w {
-                    vert[u_pos] = w;
-                    pos[w] = u_pos;
-                    vert[bin_start] = u;
-                    pos[u] = bin_start;
-                }
-
-                bin[u_deg] += 1;
-                degrees[u] -= 1;
-            }
-        }
-    }
-    
-    
-
-    println!("Degeneracy Order: {:.3}s", phase2_start.elapsed().as_secs_f64());
-    let phase3_start = Instant::now();
-
-    // ---------------------------------------------------------
-    // Compute topological limits
-    // ---------------------------------------------------------
-    let effective_max_k = std::cmp::min(max_k, degeneracy + 1);
-    let core_threshold = if min_k > 0 { min_k - 1 } else { 0 };
-
-
-    // ---------------------------------------------------------
-    // 4. Graph Compression (Vertex ID Remapping)
-    // ---------------------------------------------------------
-    
-    let mut valid_roots = Vec::new();           
-    let mut old_to_new = vec![usize::MAX; n];   
-
-    for v in 0..n {
-        if core_numbers[v] >= core_threshold {
-            let new_id = valid_roots.len();
-            old_to_new[v] = new_id;
-            valid_roots.push(v); 
-        }
-    }
-
-    let v_prime = valid_roots.len();
-
-    // 4b. Use dynamically sized Vecs instead of massive BitSets
-    let mut compressed_nbhds: Vec<Vec<usize>> = vec![vec![]; v_prime];
-    let mut compressed_degen_nbhds: Vec<Vec<usize>> = vec![vec![]; v_prime];
-
-    for new_v in 0..v_prime {
-        let old_v = valid_roots[new_v];
-        let v_rank = degen_ranks[old_v];
-
-        for &old_u in &nbhds[old_v] {
-            let new_u = old_to_new[old_u];
-
-            if new_u != usize::MAX {
-                compressed_nbhds[new_v].push(new_u);
-                if degen_ranks[old_u] > v_rank {
-                    compressed_degen_nbhds[new_v].push(new_u);
-                }
-            }
-        }
-    }
-
-    // 4c. Sort the compressed lists
-    for list in &mut compressed_nbhds { list.sort_unstable(); }
-    for list in &mut compressed_degen_nbhds { list.sort_unstable(); }
-
-    
-    println!("Compression & Sorting: {:.3}s", phase3_start.elapsed().as_secs_f64());
-    println!("Total Setup Time: {:.3}s", total_start.elapsed().as_secs_f64());
-
-    (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k)
-}
-
-
-// #[inline]
-// pub fn ncr(n: usize, k: usize) -> BigUint {
-//     if k > n { return BigUint::zero(); }
-//     if k == 0 || k == n { return BigUint::one(); }
-    
-//     let k = std::cmp::min(k, n - k);
-//     let mut res = BigUint::one();
-    
-//     for i in 1..=k {
-//         // Multiply first, then divide, using BigUint to prevent overflow
-//         res = res * (n - i + 1).to_biguint().unwrap();
-//         res = res / i.to_biguint().unwrap();
-//     }
-//     res
-// }
-
-
-fn precompute_ncr(n: usize, max_k: usize) -> Vec<Vec<BigUint>> {
-    let mut table = vec![vec![BigUint::zero(); max_k + 1]; n + 1];
-    
-    for i in 0..=n {
-        table[i][0] = BigUint::one();
-        for j in 1..=std::cmp::min(i, max_k) {
-            if i == j {
-                table[i][j] = BigUint::one();
-            } else {
-                // Pascal's identity: C(i, j) = C(i-1, j-1) + C(i-1, j)
-                let prev1 = table[i - 1][j - 1].clone();
-                let prev2 = table[i - 1][j].clone();
-                table[i][j] = prev1 + prev2;
-            }
-        }
-    }
-    table
-}
-
+use super::utils::{precompute_ncr, setup_graph, SCTnode, SCTnodeChn};
 
 //  ██████  ██       ██████  ██████   █████  ██      
 // ██       ██      ██    ██ ██   ██ ██   ██ ██      
@@ -241,17 +18,9 @@ fn precompute_ncr(n: usize, max_k: usize) -> Vec<Vec<BigUint>> {
 // ██    ██ ██      ██    ██ ██   ██ ██   ██ ██      
 //  ██████  ███████  ██████  ██████  ██   ██ ███████ 
 
-
-/*
-Peforms DFS on the level 1 nodes (found in the degen order).
-
-The neighborhoods have been recalculated on the induced subgraph of the min_k-core (nodes in the degen order)
-and are further compressed when passed to the brach function
-*/
-
 #[pyfunction]
 pub fn count_global(
-    py: Python, // <-- PyO3 injects the GIL token here
+    py: Python, 
     edges: Vec<(usize, usize)>, 
     n: usize, 
     procs: usize, 
@@ -259,7 +28,6 @@ pub fn count_global(
     max_k: usize
 ) -> PyResult<Vec<BigUint>> {
     
-    // 1. Build Compressed Neighborhoods
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
         setup_graph(&edges, n, min_k, max_k);
 
@@ -267,15 +35,11 @@ pub fn count_global(
 
     let v_prime = valid_roots.len();
 
-    // 2. Setup the Cancellation Token & Channel
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_worker = Arc::clone(&cancel); 
     let (tx, rx) = mpsc::channel();
 
-    // 3. Spawn Rayon in the Background Thread
     std::thread::spawn(move || {
-        // We use unwrap() here because if thread creation fails, the worker panics 
-        // and the main thread cleanly catches it as a Disconnect error below.
         let pool = rayon::ThreadPoolBuilder::new().num_threads(procs).build().unwrap();
         
         let parallel_counts = pool.install(|| {
@@ -288,28 +52,23 @@ pub fn count_global(
                     let cands = &compressed_degen_nbhds[new_v];
                     let num_cands = cands.len();
 
-                    // 1. If we can't mathematically reach min_k, abort immediately
                     if 1 + num_cands < min_k {
                         return vec![BigUint::zero(); effective_max_k + 1];
                     }
 
-                    // 2. Build the Micro-Bitsets (Induced Subgraph)
                     let mut local_nbhds = vec![FixedBitSet::with_capacity(num_cands); num_cands];
 
                     for (local_u, &global_u) in cands.iter().enumerate() {
                         for &global_w in &compressed_nbhds[global_u] {
-                            // Fast O(log N) mapping from global to local 0..N space
                             if let Ok(local_w) = cands.binary_search(&global_w) {
                                 local_nbhds[local_u].insert(local_w);
                             }
                         }
                     }
 
-                    // 3. Initialize the tiny local label (All 1s, since everyone is a valid candidate)
                     let mut initial_label = FixedBitSet::with_capacity(num_cands);
                     initial_label.insert_range(..); 
 
-                    // Pass the tiny local matrix instead of the global one
                     branch_global(
                         SCTnode {label: initial_label, p: 0, h: 1}, 
                         &local_nbhds, 
@@ -320,7 +79,6 @@ pub fn count_global(
                     )
                 })
                 .reduce(
-                    // Explicit type hint to prevent E0282
                     || -> Vec<BigUint> { vec![BigUint::zero(); effective_max_k + 1] },
                     |mut acc: Vec<BigUint>, local: Vec<BigUint>| {
                         if !cancel_worker.load(Ordering::Relaxed) {
@@ -333,30 +91,24 @@ pub fn count_global(
                 )
         });
 
-        // Send the result back to the main thread
         let _ = tx.send(parallel_counts);
     });
 
-    // 4. The Main Thread Watchdog
     let mut global_counts = loop {
-        // Ask Python if the user hit Ctrl+C
         if let Err(e) = py.check_signals() {
-            // Instantly flip the atomic flag so Rayon threads commit suicide
             cancel.store(true, Ordering::Relaxed);
             return Err(e); 
         }
 
-        // Check if Rayon finished its work 
         match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok(counts) => break counts, // Done! Exit loop with the data.
-            Err(mpsc::RecvTimeoutError::Timeout) => continue, // Still working.
+            Ok(counts) => break counts, 
+            Err(mpsc::RecvTimeoutError::Timeout) => continue, 
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(pyo3::exceptions::PyRuntimeError::new_err("Rust worker thread crashed."));
             }
         }
     };
 
-    // 5. Chop Trailing Zeroes
     let mut actual_max = global_counts.len().saturating_sub(1);
     while actual_max > 0 && global_counts[actual_max].is_zero() { 
         actual_max -= 1;
@@ -367,8 +119,6 @@ pub fn count_global(
     Ok(global_counts)
 }
 
-
-// --- 3. The Unified Hot Loop DFS Engine ---
 fn branch_global(
     root_node: SCTnode, 
     local_nbhds: &[FixedBitSet],
@@ -386,7 +136,6 @@ fn branch_global(
 
     while let Some(SCTnode { label, p, h }) = stack.pop() {
         
-        // --- Cooperative Cancellation Check ---
         iteration = iteration.wrapping_add(1);
         if iteration & 1023 == 0 {
             if cancel_flag.load(Ordering::Relaxed) {
@@ -396,14 +145,12 @@ fn branch_global(
 
         let size = label.count_ones(..);
 
-        // --- Leaf Node Reached ---
         if size == 0 {
             let max_i = std::cmp::min(p, max_k.saturating_sub(h));
             if h + max_i >= min_k {
                 for i in 0..=max_i {
                     let k = h + i;
                     if k >= min_k && k <= max_k {
-                        //local_counts[k] += ncr(p, i);
                         local_counts[k] += &ncr_table[p][i];
                     }
                 }
@@ -411,17 +158,14 @@ fn branch_global(
             continue;
         }
 
-        // --- Pruning Wall ---
         if h + p + size < min_k {
             continue;
         }
 
-        // --- Find the Pivot ---
         let mut pivot = 0;
         let mut max_degree = 0;
         
         for w in label.ones() {
-            // Pure SIMD bitwise intersection on the micro-bitset!
             let mut isect = label.clone();
             isect.intersect_with(&local_nbhds[w]);
             
@@ -433,13 +177,11 @@ fn branch_global(
             }
         }
 
-        // --- 1. Pivot Branch ---
         let mut p_label = label.clone();
         p_label.intersect_with(&local_nbhds[pivot]);
         
         stack.push(SCTnode { label: p_label, p: p + 1, h });
 
-        // --- 2. Hold Branches ---
         if h + 1 <= max_k {
             let mut h_cands = label.clone();
             
@@ -462,7 +204,6 @@ fn branch_global(
     local_counts
 }
 
-
 // ██    ██ ███████ ██████  ████████ ███████ ██   ██ 
 // ██    ██ ██      ██   ██    ██    ██       ██ ██  
 // ██    ██ █████   ██████     ██    █████     ███   
@@ -477,7 +218,7 @@ pub fn count_vertex(
     procs: usize, 
     min_k: usize, 
     max_k: usize
-) -> PyResult<HashMap<usize, Vec<BigUint>>> { // <-- Returns sparse dict!
+) -> PyResult<HashMap<usize, Vec<BigUint>>> { 
     
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
         setup_graph(&edges, n, min_k, max_k);
@@ -506,7 +247,6 @@ pub fn count_vertex(
                         return HashMap::new();
                     }
 
-                    // 1. Build Micro-Bitsets
                     let mut local_nbhds = vec![FixedBitSet::with_capacity(num_cands); num_cands];
                     for (local_u, &global_u) in cands.iter().enumerate() {
                         for &global_w in &compressed_nbhds[global_u] {
@@ -519,19 +259,18 @@ pub fn count_vertex(
                     let mut initial_label = FixedBitSet::with_capacity(num_cands);
                     initial_label.insert_range(..);
 
-                    // 2. Init Root with v_prime ID
                     let root_node = SCTnodeChn {
                         label: initial_label,
                         p: 0,
                         h: 1,
                         pv: Vec::new(),
-                        hv: vec![new_v], // Stores v_prime ID!
+                        hv: vec![new_v], 
                     };
 
                     branch_vertex(
                         root_node, 
                         &local_nbhds, 
-                        cands, // Pass translation array
+                        cands, 
                         min_k, 
                         effective_max_k,
                         &cancel_worker,
@@ -599,7 +338,7 @@ pub fn count_vertex(
 fn branch_vertex(
     root_node: SCTnodeChn,
     local_nbhds: &[FixedBitSet],
-    cands: &[usize], // <-- Used to translate local IDs back to v_prime
+    cands: &[usize], 
     min_k: usize,
     max_k: usize,
     cancel_flag: &AtomicBool,
@@ -635,8 +374,6 @@ fn branch_vertex(
                             }
                             
                             if i > 0 && p > 0 {
-                                // let mut ncr_p = &ncr_0 * i.to_biguint().unwrap();
-                                // ncr_p /= p.to_biguint().unwrap();
                                 let ncr_p = &ncr_table[p - 1][i - 1];
                                 
                                 if !ncr_p.is_zero() {
@@ -672,7 +409,7 @@ fn branch_vertex(
         p_label.intersect_with(&local_nbhds[pivot]);
         
         let mut new_pv = pv.clone();
-        new_pv.push(cands[pivot]); // TRANSLATE TO GLOBAL ID
+        new_pv.push(cands[pivot]); 
         
         stack.push(SCTnodeChn { label: p_label, p: p + 1, h, pv: new_pv, hv: hv.clone() });
 
@@ -689,7 +426,7 @@ fn branch_vertex(
                 h_label.difference_with(&excluded_holds);
 
                 let mut new_hv = hv.clone();
-                new_hv.push(cands[w]); // TRANSLATE TO GLOBAL ID
+                new_hv.push(cands[w]); 
 
                 stack.push(SCTnodeChn { label: h_label, p, h: h + 1, pv: pv.clone(), hv: new_hv });
                 excluded_holds.insert(w);
@@ -915,7 +652,7 @@ fn branch_edge(
         let mut p_label = label.clone();
         p_label.intersect_with(&local_nbhds[pivot]);
         let mut new_pv = pv.clone();
-        new_pv.push(cands[pivot]); // TRANSLATE
+        new_pv.push(cands[pivot]); 
         
         stack.push(SCTnodeChn { label: p_label, p: p + 1, h, pv: new_pv, hv: hv.clone() });
 
@@ -931,7 +668,7 @@ fn branch_edge(
                 h_label.difference_with(&excluded_holds);
                 
                 let mut new_hv = hv.clone();
-                new_hv.push(cands[w]); // TRANSLATE
+                new_hv.push(cands[w]); 
                 
                 stack.push(SCTnodeChn { label: h_label, p, h: h + 1, pv: pv.clone(), hv: new_hv });
                 excluded_holds.insert(w);
