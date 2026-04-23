@@ -1,0 +1,41 @@
+site_name = "pivoterpy"
+site_description = "High-performance clique counting engine for Python and Rust."
+site_author = "Your Name"
+
+# Plugins
+plugins = ["search"]
+
+# The Navigation Menu
+# TOML represents list-of-dictionaries using inline tables
+nav = [
+    { "Home" = "index.md" },
+    { "Getting Started" = "installation.md" },
+    { "API Reference" = [
+        { "Solver" = "api/solver.md" },
+        { "Graph" = "api/graph.md" }
+    ]}
+]
+
+# Theme Configuration
+[theme]
+name = "material"
+
+    # Light Mode Settings
+    [[theme.palette]]
+    media = "(prefers-color-scheme: light)"
+    scheme = "default"
+    primary = "indigo"
+    
+        [theme.palette.toggle]
+        icon = "material/brightness-7"
+        name = "Switch to dark mode"
+
+    # Dark Mode Settings
+    [[theme.palette]]
+    media = "(prefers-color-scheme: dark)"
+    scheme = "slate"
+    primary = "indigo"
+    
+        [theme.palette.toggle]
+        icon = "material/brightness-4"
+        name = "Switch to light mode"
