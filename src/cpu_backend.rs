@@ -108,14 +108,15 @@ pub fn setup_graph(
     // The peeling process
     for i in 0..n {
         let v = vert[i];
-        let v_deg = degrees[v]; // BZ guarantees this is now exactly the core number!
+        let v_deg = degrees[v]; 
         
         degeneracy = std::cmp::max(degeneracy, v_deg);
         core_numbers[v] = degeneracy;
         degen_ranks[v] = i;
 
         for &u in &nbhds[v] {
-            // THE FIX: Strictly > prevents underflow and duplicate processing
+            // THE FIX: Check array position, NOT degree!
+            // If u is further to the right in the array, it hasn't been peeled yet.
             if degrees[u] > degrees[v] {
                 let u_deg = degrees[u];
                 let u_pos = pos[u];
@@ -135,6 +136,8 @@ pub fn setup_graph(
             }
         }
     }
+    
+    
 
     println!("Degeneracy Order: {:.3}s", phase2_start.elapsed().as_secs_f64());
     let phase3_start = Instant::now();
