@@ -19,3 +19,7 @@
 - reversed parallelizaton order for Rust global/vertex counting
 
 - switched to precomputed Pascals triangle
+
+- unified python entry points
+
+- refactored rust backend
