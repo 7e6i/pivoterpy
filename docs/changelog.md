@@ -4,6 +4,12 @@ All notable changes to **pivoterpy** are summarized here. Release versions follo
 
 ---
 
+## 2.1.1
+
+### Fixed
+
+- Forgot to mute my timing println statements in the Rust backend. Might add them as a feature in a future release.
+
 ## 2.1.0
 
 ### Changed

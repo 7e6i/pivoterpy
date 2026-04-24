@@ -45,7 +45,7 @@ BibTeX for this package:
   author       = {Spencer Anderson},
   title        = {{pivoterpy}},
   year         = {2026},
-  version      = {2.1.0},
+  version      = {2.1.1},
   url          = {https://github.com/7e6i/pivoterpy}
 }
 ```
