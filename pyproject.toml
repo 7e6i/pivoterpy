@@ -34,6 +34,7 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/7e6i/pivoterpy"
+Documentation = "https://7e6i.github.io/pivoterpy/"
 
 
 [project.optional-dependencies]

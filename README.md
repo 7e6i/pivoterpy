@@ -4,7 +4,7 @@
 
 **pivoterpy** — exact clique counting in Python and Rust, powered by the Pivoter algorithm ([Jain & Seshadhri, 2020](https://arxiv.org/abs/2001.06784)). You get a small Python API: build a graph, run `pivoter`, read counts at **global**, **vertex**, or **edge** resolution. Work is done by a **Rust** extension by default, with a pure **Python** backend when you need it.
 
-**Repo:** [github.com/7e6i/pivoterpy](https://github.com/7e6i/pivoterpy) · **Docs:** [`docs/`](docs/) (Zensical sources; run `zensical serve` from the repo root).
+**Repo:** [github.com/7e6i/pivoterpy](https://github.com/7e6i/pivoterpy) · **Documentation:** [7e6i.github.io/pivoterpy](https://7e6i.github.io/pivoterpy/)
 
 ---
 
@@ -14,7 +14,7 @@
 pip install pivoterpy
 ```
 
-From source (needs [Rust](https://www.rust-lang.org/) + [Maturin](https://www.maturin.rs/)): clone the repo, then `maturin develop --release` in the project root. Details: [`docs/installation.md`](docs/installation.md).
+From source (needs [Rust](https://www.rust-lang.org/) + [Maturin](https://www.maturin.rs/)): clone the repo, then `maturin develop --release` in the project root. More detail: [Installation](https://7e6i.github.io/pivoterpy/installation/).
 
 ---
 
@@ -30,7 +30,7 @@ P = pvt.pivoter(G)  # default: resolution="global", backend="rust"
 print(P.global_counts)
 ```
 
-Use `resolution="vertex"` or `"edge"` for local counts; `backend="python"` if the Rust wheel is not available. See [`docs/usage.md`](docs/usage.md).
+Use `resolution="vertex"` or `"edge"` for local counts; `backend="python"` if the Rust wheel is not available. See [Usage](https://7e6i.github.io/pivoterpy/usage/).
 
 ---
 
