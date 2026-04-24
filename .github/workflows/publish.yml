@@ -20,7 +20,7 @@ jobs:
           manylinux: auto
           command: build
           args: --release --out dist --sdist 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v8
         with:
           name: wheels-linux-sdist
           path: dist
@@ -40,7 +40,7 @@ jobs:
           command: build
           target: x64
           args: --release --out dist
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v8
         with:
           name: wheels-windows
           path: dist
@@ -56,7 +56,7 @@ jobs:
           command: build
           target: universal2-apple-darwin
           args: --release --out dist 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v8
         with:
           name: wheels-macos
           path: dist
