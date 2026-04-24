@@ -1,0 +1,86 @@
+[project]
+site_name = "pivoterpy"
+site_description = "High-performance clique counting engine for Python and Rust."
+site_author = "Your Name"
+site_url = "https://7e6i.github.io/pivoterpy/"
+plugins = ["search"]
+nav = [
+    { "Home" = "index.md" },
+    { "Getting Started" = "installation.md" },
+    { "Usage" = "usage.md" },
+    { "Backends" = "backends.md" },
+    { "Algorithm" = "algorithm.md" },
+    { "Changelog" = "changelog.md" },
+    { "API Reference" = [
+        { "Solver" = "api/solver.md" },
+        { "Graph" = "api/graph.md" },
+    ]},
+]
+extra_javascript = [
+    "javascripts/mathjax.js",
+    "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js",
+]
+
+# Full Zensical default markdown extensions (see zensical.org/docs/setup/extensions/).
+# If only pymdownx.arithmatex is listed, defaults are replaced and fenced code breaks.
+
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+
+[project.markdown_extensions.pymdownx.betterem]
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.magiclink]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.smartsymbols]
+
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+    { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+combine_header_slug = true
+
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+
+[project.markdown_extensions.pymdownx.tilde]
+
+[project.theme]
+name = "material"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "indigo"
+toggle = { icon = "material/brightness-7", name = "Switch to dark mode" }
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "indigo"
+toggle = { icon = "material/brightness-4", name = "Switch to light mode" }

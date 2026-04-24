@@ -9,7 +9,23 @@ except ImportError:
     )
 
 class CUDAKernel:
-    def __init__(self, G, resolution, procs, min_k, max_k):
+    """
+    The Python wrapper for the experimental CUDA backend.
+    
+    NOTE: This backend is still a work in progress and is not yet fully functional.
+    """
+
+    def __init__(self, G, resolution: str, procs: int, min_k: int, max_k: int) -> None:
+        """
+        Initializes the CUDA backend wrapper.
+        
+        Args:
+            G (Graph): The pre-processed graph object.
+            resolution (str): The desired output resolution ('g', 'v', or 'e').
+            procs (int): Configures SM usage, grid sizing, or max concurrent streams.
+            min_k (int): The minimum clique size to compute.
+            max_k (int): The maximum clique size to compute.
+        """
         self.edges = G.edges
         self.n = G.n
         
@@ -21,8 +37,15 @@ class CUDAKernel:
         # grid sizing, or max concurrent streams rather than CPU cores.
         self.procs = procs 
 
-    def execute(self):
-        """Routes the execution to the compiled CUDA binaries."""
+    def execute(self) -> list[int] | dict[int, list[int]] | dict[tuple[int, int], list[int]] | None:
+        """
+        Routes the execution to the compiled CUDA binaries.
+        
+        Returns:
+            list[int] | dict[int, list[int]] | dict[tuple[int, int], list[int]] | None: 
+                The computed clique counts corresponding to the specified resolution 
+                (currently returns None or partial results as it is a WIP).
+        """
         
         if self.resolution == "g":
             test = pivoter_rust.count_global_cuda()

@@ -4,10 +4,13 @@ build-backend = "maturin"
 
 [project]
 name = "pivoterpy"
-#version = "v.v.v" version is specified in Cargo.toml
-description = "Parallelized Python (and Rust) implementation of the Pivoter clique counting algorithm."
+# version is specified in Cargo.toml
+dynamic = ["version"] 
+description = "Parallelized implementation of the Pivoter clique counting algorithm."
 readme = "README.md"
-requires-python = ">=3.8" 
+license = "MIT"
+license-files = ["LICENSE.txt"]
+requires-python = ">=3.8"
 dependencies = []
 
 keywords = [
@@ -21,6 +24,7 @@ keywords = [
 ]
 
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Mathematics",
@@ -29,7 +33,7 @@ classifiers = [
 ]
 
 [project.urls]
-source = "https://github.com/7e6i/Pivoter"
+Repository = "https://github.com/7e6i/pivoterpy"
 
 
 [project.optional-dependencies]
@@ -38,8 +42,8 @@ dev = [
     "maturin>=1.0,<2.0",
     "networkx>=3.0",
     "numpy>=2.0",
-    "mkdocs-material>=9.0",
-    "patchelf>=0.17.2.4"
+    "patchelf>=0.17.2.4",
+    "zensical>=0.0.34"
 ]
 
 

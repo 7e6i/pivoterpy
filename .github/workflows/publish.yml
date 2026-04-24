@@ -1,4 +1,5 @@
 # .github/workflows/publish.yml
+# Wheels use default Cargo features (no `cuda`); see `build.rs`.
 
 name: Publish to PyPI
 
