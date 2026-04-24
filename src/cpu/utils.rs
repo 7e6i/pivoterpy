@@ -1,7 +1,7 @@
 use fixedbitset::FixedBitSet;
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
-use std::time::Instant;
+//use std::time::Instant;
 
 /// Represents a node in the Succinct Clique Tree (SCT) for global clique counting.
 ///
@@ -78,8 +78,8 @@ pub fn setup_graph(
     min_k: usize,
     max_k: usize,
 ) -> (Vec<Vec<usize>>, Vec<Vec<usize>>, Vec<usize>, usize) {
-    let total_start = Instant::now();
-    let phase1_start = Instant::now();
+    //let total_start = Instant::now();
+    //let phase1_start = Instant::now();
     
     // ---------------------------------------------------------
     // 1. Build initial neighborhoods and degree buckets
@@ -100,7 +100,7 @@ pub fn setup_graph(
     }
 
     //println!("Adjacency Build: {:.3}s", phase1_start.elapsed().as_secs_f64());
-    let phase2_start = Instant::now();
+    //let phase2_start = Instant::now();
 
     // ---------------------------------------------------------
     // 2. Batagelj-Zaversnik Degeneracy Ordering O(V + E)
@@ -173,7 +173,7 @@ pub fn setup_graph(
     }
     
     //println!("Degeneracy Order: {:.3}s", phase2_start.elapsed().as_secs_f64());
-    let phase3_start = Instant::now();
+    //let phase3_start = Instant::now();
 
     let effective_max_k = std::cmp::min(max_k, degeneracy + 1);
     let core_threshold = if min_k > 0 { min_k - 1 } else { 0 };
