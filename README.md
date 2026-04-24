@@ -2,7 +2,7 @@
 
 > *"I fear not the man who has implemented 1000 clique counting algorithms, I fear the man who has implemented 1 clique counting algorithm a thousand times" - Sun Tzu, The Art of War*
 
-**pivoterpy** counts cliques in undirected graphs *exactly*, using the **Pivoter** algorithm ([Jain & Seshadhri, 2020](https://arxiv.org/abs/2001.06784)). You get a small Python API: build a graph, run `pivoter`, read counts at **global**, **vertex**, or **edge** resolution. Work is done by a **Rust** extension by default, with a pure **Python** backend when you need it.
+**pivoterpy** — exact clique counting in Python and Rust, powered by the Pivoter algorithm ([Jain & Seshadhri, 2020](https://arxiv.org/abs/2001.06784)). You get a small Python API: build a graph, run `pivoter`, read counts at **global**, **vertex**, or **edge** resolution. Work is done by a **Rust** extension by default, with a pure **Python** backend when you need it.
 
 **Repo:** [github.com/7e6i/pivoterpy](https://github.com/7e6i/pivoterpy) · **Docs:** [`docs/`](docs/) (Zensical sources; run `zensical serve` from the repo root).
 

@@ -1,6 +1,6 @@
 # pivoterpy
 
-Exact **clique counting** on undirected graphs: one Python API, two backends (**Rust** and pure **Python**), global / vertex / edge resolutions, and optional parallelism.
+Exact clique counting in Python and Rust, powered by the Pivoter algorithm. One Python API, two backends (**Rust** and pure **Python**), global / vertex / edge resolutions, and optional parallelism.
 
 [Install](installation.md) · [Usage](usage.md) · [Backends](backends.md) · [Algorithm](algorithm.md) · [Changelog](changelog.md) · API: [`Graph`](api/graph.md) · [`pivoter`](api/solver.md)
 

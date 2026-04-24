@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "pivoterpy"
 # version is specified in Cargo.toml
 dynamic = ["version"] 
-description = "Parallelized implementation of the Pivoter clique counting algorithm."
+description = "Exact clique counting in Python and Rust, powered by the Pivoter algorithm."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE.txt"]

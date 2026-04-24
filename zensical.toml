@@ -1,6 +1,6 @@
 [project]
 site_name = "pivoterpy"
-site_description = "High-performance clique counting engine for Python and Rust."
+site_description = "Exact clique counting in Python and Rust, powered by the Pivoter algorithm."
 site_author = "Your Name"
 site_url = "https://7e6i.github.io/pivoterpy/"
 plugins = ["search"]
