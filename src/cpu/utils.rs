@@ -99,7 +99,7 @@ pub fn setup_graph(
         by_degrees[deg].push(v);
     }
 
-    println!("Adjacency Build: {:.3}s", phase1_start.elapsed().as_secs_f64());
+    //println!("Adjacency Build: {:.3}s", phase1_start.elapsed().as_secs_f64());
     let phase2_start = Instant::now();
 
     // ---------------------------------------------------------
@@ -172,7 +172,7 @@ pub fn setup_graph(
         }
     }
     
-    println!("Degeneracy Order: {:.3}s", phase2_start.elapsed().as_secs_f64());
+    //println!("Degeneracy Order: {:.3}s", phase2_start.elapsed().as_secs_f64());
     let phase3_start = Instant::now();
 
     let effective_max_k = std::cmp::min(max_k, degeneracy + 1);
@@ -213,8 +213,8 @@ pub fn setup_graph(
     for list in &mut compressed_nbhds { list.sort_unstable(); }
     for list in &mut compressed_degen_nbhds { list.sort_unstable(); }
 
-    println!("Compression & Sorting: {:.3}s", phase3_start.elapsed().as_secs_f64());
-    println!("Total Setup Time: {:.3}s", total_start.elapsed().as_secs_f64());
+    //println!("Compression & Sorting: {:.3}s", phase3_start.elapsed().as_secs_f64());
+    //println!("Total Setup Time: {:.3}s", total_start.elapsed().as_secs_f64());
 
     (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k)
 }
