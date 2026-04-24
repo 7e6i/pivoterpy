@@ -2,6 +2,7 @@
 site_name = "pivoterpy"
 site_description = "High-performance clique counting engine for Python and Rust."
 site_author = "Your Name"
+site_url = "https://7e6i.github.io/pivoterpy/"
 plugins = ["search"]
 nav = [
     { "Home" = "index.md" },

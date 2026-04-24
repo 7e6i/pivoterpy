@@ -1,4 +1,6 @@
 # .github/workflows/test-build.yml
+# Default `maturin build` does not enable the `cuda` Cargo feature, so no nvcc/CUDA is required
+# on the runner (see `build.rs` and `Cargo.toml` `[features]`).
 
 name: Test Build (No Publish)
 

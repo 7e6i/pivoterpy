@@ -8,7 +8,9 @@ name = "pivoterpy"
 dynamic = ["version"] 
 description = "Parallelized implementation of the Pivoter clique counting algorithm."
 readme = "README.md"
-requires-python = ">=3.8" 
+license = "MIT"
+license-files = ["LICENSE.txt"]
+requires-python = ">=3.8"
 dependencies = []
 
 keywords = [
@@ -22,6 +24,7 @@ keywords = [
 ]
 
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Mathematics",
@@ -30,7 +33,7 @@ classifiers = [
 ]
 
 [project.urls]
-source = "https://github.com/7e6i/Pivoter"
+Repository = "https://github.com/7e6i/pivoterpy"
 
 
 [project.optional-dependencies]

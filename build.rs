@@ -1,12 +1,14 @@
-//! Build script for the experimental CUDA backend.
+//! Build script for the optional CUDA backend (`--features cuda`).
 //!
-//! This script uses the `cc` crate to compile the `.cu` files using `nvcc`
-//! and instructs Cargo to link the resulting library along with the CUDA runtime.
+//! When the `cuda` feature is off (default for PyPI wheels and GitHub Actions), this script does
+//! nothing so `cargo` / `maturin` do not require `nvcc` or a CUDA install.
 
-// build.rs
-
-/// Compiles `pivoter.cu` and configures the linker for CUDA and C++ standard libraries.
 fn main() {
+    if std::env::var_os("CARGO_FEATURE_CUDA").is_none() {
+        return;
+    }
+
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/cuda/pivoter.cu");
 
     cc::Build::new()
@@ -14,9 +16,9 @@ fn main() {
         .file("src/cuda/pivoter.cu")
         .flag("-O3")
         .flag("-ccbin=gcc-13")
-        .compile("pivoter_cuda"); 
-    
+        .compile("pivoter_cuda");
+
     println!("cargo:rustc-link-search=native=/usr/local/cuda/lib64");
-    println!("cargo:rustc-link-lib=static=cudart_static"); 
-    println!("cargo:rustc-link-lib=dylib=stdc++"); 
+    println!("cargo:rustc-link-lib=static=cudart_static");
+    println!("cargo:rustc-link-lib=dylib=stdc++");
 }
