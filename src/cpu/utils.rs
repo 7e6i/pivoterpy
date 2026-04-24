@@ -3,7 +3,7 @@ use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use std::time::Instant;
 
-/// Represents a node in the Search-and-Count Tree (SCT) for global clique counting.
+/// Represents a node in the Succinct Clique Tree (SCT) for global clique counting.
 ///
 /// Tracks the current set of candidate vertices (`label`), along with the number
 /// of pivot (`p`) and hold (`h`) vertices assigned along the path to this node.
@@ -13,7 +13,7 @@ pub struct SCTnode {
     pub h: usize,
 }
 
-/// Represents a node in the Search-and-Count Tree (SCT) for local (vertex/edge) clique counting.
+/// Represents a node in the Succinct Clique Tree (SCT) for local (vertex/edge) clique counting.
 ///
 /// In addition to the basic candidate `label` and counts (`p`, `h`), this structure
 /// tracks the exact history of pivot (`pv`) and hold (`hv`) vertex assignments required

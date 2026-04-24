@@ -12,7 +12,7 @@ def init_worker():
 
 class SCTnode:
     """
-    Represents a node in the Search-and-Count Tree (SCT) for global clique counting.
+    Represents a node in the Succinct Clique Tree (SCT) for global clique counting.
     
     Attributes:
         label (set[int]): The set of available vertices for further expansion.
@@ -25,7 +25,7 @@ class SCTnode:
 
 class SCTnode_chn:
     """
-    Represents a node in the Search-and-Count Tree (SCT) for local (vertex/edge) clique counting.
+    Represents a node in the Succinct Clique Tree (SCT) for local (vertex/edge) clique counting.
     
     In addition to basic counting, it tracks the history of pivot and hold assignments
     required to attribute specific clique combinations to precise vertices or edges.

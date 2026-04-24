@@ -1,7 +1,7 @@
 //! The pure-CPU implementation of the Pivoter algorithm.
 //!
 //! This module is responsible for graph preprocessing, degeneracy ordering,
-//! and the core Search-and-Count Tree (SCT) exploration algorithms for
+//! and the core Succinct Clique Tree (SCT) exploration algorithms for
 //! global, vertex, and edge clique counting.
 
 pub mod core;
