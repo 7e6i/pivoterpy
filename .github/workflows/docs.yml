@@ -22,7 +22,6 @@ jobs:
           python-version: "3.12"
       - run: pip install "zensical>=0.0.34"
       - run: zensical build
-      # v4 pins upload-artifact@ea165f8 (v4.6.2 / Node 20). v5+ uses upload-artifact v7.
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
