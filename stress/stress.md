@@ -140,6 +140,5 @@ The driver should:
 - Every new optimization is evaluated on both wall time and peak RSS; a time win
   that increases peak memory is not automatically a win.
 
-See [../tests/ideas.md](../tests/ideas.md) and
-[../tests/ideas2.md](../tests/ideas2.md) for performance and memory work items
-this suite is meant to validate.
+See [ideas.md](ideas.md) for the performance, memory, progress-reporting, and
+GPU work items this suite is meant to validate.
