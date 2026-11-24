@@ -73,7 +73,7 @@ Record for every run:
 
 - wall time (seconds)
 - peak RSS (`/usr/bin/time -v` or `resource.getrusage(RUSAGE_SELF).ru_maxrss`)
-- graph load time and solver time separately
+- graph load time (streamed through `pvt.from_edge_file`) and solver time separately
 - returned counts plus which invariants passed
 - commit, Rust/Python versions, CPU, RAM, OS, `procs`, resolution, `min_k`, `max_k`
 

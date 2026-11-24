@@ -4,6 +4,17 @@ All notable changes to **pivoterpy** are summarized here. Release versions follo
 
 ---
 
+## Unreleased
+
+### Changed
+
+- **Graph storage:** `Graph` now keeps edges in a flat native-endian `uint32` buffer instead of a `list[tuple[int, int]]`, cutting edge storage from ~64 bytes per edge to 8. `Graph.edges` is now a lazy `Sequence` view; use `list(G.edges)` to materialize it, or `G.edge_bytes()` for the raw buffer the Rust backend borrows.
+- **`from_edge_file()`:** new streaming constructor that reads a whitespace-delimited (optionally gzipped) edge list straight into compact storage without building a tuple list.
+- **`from_edge_list()`:** gained `deduplicate=False`; deduplication now uses NumPy when available.
+- **Rust backend:** kernels accept the raw `uint32` edge buffer as a borrowed `PyBytes` instead of `Vec<(usize, usize)>` and build flat CSR adjacency structures (`offsets` + `nbrs`). Removes the per-edge PyO3 copy, the `Vec<Vec<u32>>` adjacency, the 2x capacity slack from per-vertex `Vec`s, and the unused `by_degrees` structure.
+
+---
+
 ## 2.1.1
 
 ### Fixed

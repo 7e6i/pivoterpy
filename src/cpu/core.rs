@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
@@ -21,7 +22,7 @@ use super::utils::{precompute_ncr, setup_graph, SCTnode, SCTnodeChn};
 #[pyfunction]
 pub fn count_global(
     py: Python, 
-    edges: Vec<(usize, usize)>, 
+    edges: &Bound<'_, PyBytes>,
     n: usize, 
     procs: usize, 
     min_k: usize, 
@@ -29,9 +30,12 @@ pub fn count_global(
 ) -> PyResult<Vec<BigUint>> {
     
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
-        setup_graph(&edges, n, min_k, max_k);
+        setup_graph(edges.as_bytes(), n, min_k, max_k)?;
 
-    let max_p = compressed_degen_nbhds.iter().map(|nbhd| nbhd.len()).max().unwrap_or(0);
+    let max_p = (0..compressed_degen_nbhds.len())
+        .map(|v| compressed_degen_nbhds.neighbors(v).len())
+        .max()
+        .unwrap_or(0);
 
     let v_prime = valid_roots.len();
 
@@ -49,7 +53,8 @@ pub fn count_global(
                 .into_par_iter()
                 .rev()
                 .map(|new_v| {
-                    let cands = &compressed_degen_nbhds[new_v];
+                    let cands_buf = compressed_degen_nbhds.neighbors(new_v);
+                    let cands: Vec<usize> = cands_buf.iter().map(|&x| x as usize).collect();
                     let num_cands = cands.len();
 
                     if 1 + num_cands < min_k {
@@ -59,8 +64,8 @@ pub fn count_global(
                     let mut local_nbhds = vec![FixedBitSet::with_capacity(num_cands); num_cands];
 
                     for (local_u, &global_u) in cands.iter().enumerate() {
-                        for &global_w in &compressed_nbhds[global_u] {
-                            if let Ok(local_w) = cands.binary_search(&global_w) {
+                        for &global_w in compressed_nbhds.neighbors(global_u) {
+                            if let Ok(local_w) = cands.binary_search(&(global_w as usize)) {
                                 local_nbhds[local_u].insert(local_w);
                             }
                         }
@@ -213,7 +218,7 @@ fn branch_global(
 #[pyfunction]
 pub fn count_vertex(
     py: Python, 
-    edges: Vec<(usize, usize)>, 
+    edges: &Bound<'_, PyBytes>,
     n: usize, 
     procs: usize, 
     min_k: usize, 
@@ -221,9 +226,12 @@ pub fn count_vertex(
 ) -> PyResult<HashMap<usize, Vec<BigUint>>> { 
     
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
-        setup_graph(&edges, n, min_k, max_k);
+        setup_graph(edges.as_bytes(), n, min_k, max_k)?;
 
-    let max_p = compressed_degen_nbhds.iter().map(|nbhd| nbhd.len()).max().unwrap_or(0);
+    let max_p = (0..compressed_degen_nbhds.len())
+        .map(|v| compressed_degen_nbhds.neighbors(v).len())
+        .max()
+        .unwrap_or(0);
 
     let v_prime = valid_roots.len();
     let cancel = Arc::new(AtomicBool::new(false));
@@ -240,7 +248,8 @@ pub fn count_vertex(
                 .into_par_iter()
                 .rev()
                 .map(|new_v| {
-                    let cands = &compressed_degen_nbhds[new_v];
+                    let cands_buf = compressed_degen_nbhds.neighbors(new_v);
+                    let cands: Vec<usize> = cands_buf.iter().map(|&x| x as usize).collect();
                     let num_cands = cands.len();
 
                     if 1 + num_cands < min_k {
@@ -249,8 +258,8 @@ pub fn count_vertex(
 
                     let mut local_nbhds = vec![FixedBitSet::with_capacity(num_cands); num_cands];
                     for (local_u, &global_u) in cands.iter().enumerate() {
-                        for &global_w in &compressed_nbhds[global_u] {
-                            if let Ok(local_w) = cands.binary_search(&global_w) {
+                        for &global_w in compressed_nbhds.neighbors(global_u) {
+                            if let Ok(local_w) = cands.binary_search(&(global_w as usize)) {
                                 local_nbhds[local_u].insert(local_w);
                             }
                         }
@@ -270,7 +279,7 @@ pub fn count_vertex(
                     branch_vertex(
                         root_node, 
                         &local_nbhds, 
-                        cands, 
+                        &cands, 
                         min_k, 
                         effective_max_k,
                         &cancel_worker,
@@ -450,7 +459,7 @@ fn normalize_edge(u: usize, v: usize) -> (usize, usize) {
 #[pyfunction]
 pub fn count_edge(
     py: Python, 
-    edges: Vec<(usize, usize)>, 
+    edges: &Bound<'_, PyBytes>,
     n: usize, 
     procs: usize, 
     min_k: usize, 
@@ -458,9 +467,12 @@ pub fn count_edge(
 ) -> PyResult<HashMap<(usize, usize), Vec<BigUint>>> {
     
     let (compressed_nbhds, compressed_degen_nbhds, valid_roots, effective_max_k) = 
-        setup_graph(&edges, n, min_k, max_k);
+        setup_graph(edges.as_bytes(), n, min_k, max_k)?;
     
-    let max_p = compressed_degen_nbhds.iter().map(|nbhd| nbhd.len()).max().unwrap_or(0);
+    let max_p = (0..compressed_degen_nbhds.len())
+        .map(|v| compressed_degen_nbhds.neighbors(v).len())
+        .max()
+        .unwrap_or(0);
 
     let v_prime = valid_roots.len();
     let cancel = Arc::new(AtomicBool::new(false));
@@ -475,7 +487,8 @@ pub fn count_edge(
             (0..v_prime)
                 .into_par_iter()
                 .map(|new_v| {
-                    let cands = &compressed_degen_nbhds[new_v];
+                    let cands_buf = compressed_degen_nbhds.neighbors(new_v);
+                    let cands: Vec<usize> = cands_buf.iter().map(|&x| x as usize).collect();
                     let num_cands = cands.len();
 
                     if 1 + num_cands < min_k {
@@ -484,8 +497,8 @@ pub fn count_edge(
 
                     let mut local_nbhds = vec![FixedBitSet::with_capacity(num_cands); num_cands];
                     for (local_u, &global_u) in cands.iter().enumerate() {
-                        for &global_w in &compressed_nbhds[global_u] {
-                            if let Ok(local_w) = cands.binary_search(&global_w) {
+                        for &global_w in compressed_nbhds.neighbors(global_u) {
+                            if let Ok(local_w) = cands.binary_search(&(global_w as usize)) {
                                 local_nbhds[local_u].insert(local_w);
                             }
                         }
@@ -497,7 +510,7 @@ pub fn count_edge(
                     branch_edge(
                         SCTnodeChn {label: initial_label, p: 0, h: 1, pv: Vec::new(), hv: vec![new_v]}, 
                         &local_nbhds, 
-                        cands, 
+                        &cands, 
                         min_k, 
                         effective_max_k,
                         &cancel_worker,

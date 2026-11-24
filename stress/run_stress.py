@@ -22,7 +22,6 @@ summary table is printed to stdout.
 from __future__ import annotations
 
 import argparse
-import gzip
 import json
 import os
 import resource
@@ -62,29 +61,16 @@ RESULT_PREFIX = "RESULT_JSON:"
 # ---------------------------------------------------------------------------
 
 
-def _open_text(path: Path):
-    if path.suffix == ".gz":
-        return gzip.open(path, "rt")
-    return open(path, "rt")
-
-
-def read_edges(path: Path) -> list[tuple[int, int]]:
-    """Read a SNAP edge list, skipping comments, normalizing order."""
-    edges: list[tuple[int, int]] = []
-    with _open_text(path) as f:
-        for line in f:
-            if not line or line[0] == "#":
-                continue
-            parts = line.split()
-            if len(parts) < 2:
-                continue
-            u, v = int(parts[0]), int(parts[1])
-            if u == v:
-                continue
-            if u > v:
-                u, v = v, u
-            edges.append((u, v))
-    return edges
+def data_path(filename: str) -> Path | None:
+    """Locate a dataset, accepting either ``.txt.gz`` or the plain ``.txt``."""
+    path = DATA / filename
+    if path.exists():
+        return path
+    if filename.endswith(".gz"):
+        plain = path.with_suffix("")
+        if plain.exists():
+            return plain
+    return None
 
 
 def _mb(kb: int) -> float:
@@ -103,7 +89,10 @@ def run_worker(args: argparse.Namespace) -> int:
 
     name = args.graph
     filename, expected_n, expected_m, expected_triangles = GRAPHS[name]
-    path = DATA / filename
+    path = data_path(filename)
+    if path is None:
+        print(f"missing data file for {name}", file=sys.stderr)
+        return 2
 
     try:
         import pivoterpy as pvt
@@ -122,14 +111,11 @@ def run_worker(args: argparse.Namespace) -> int:
     }
 
     try:
+        # Stream straight into the compact Graph; never materialize Python
+        # tuples for the whole edge list. SNAP files are already simple.
         t0 = time.perf_counter()
-        edges = read_edges(path)
-        record["read_s"] = round(time.perf_counter() - t0, 3)
-
-        t0 = time.perf_counter()
-        G = pvt.from_edge_list(edges)
-        record["graph_s"] = round(time.perf_counter() - t0, 3)
-        del edges
+        G = pvt.from_edge_file(path)
+        record["load_s"] = round(time.perf_counter() - t0, 3)
 
         record["n"] = G.n
         record["m"] = G.m
@@ -260,7 +246,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def resolve_graphs(names: list[str]) -> list[str]:
     if "all" in names:
-        return [name for name in GRAPHS if (DATA / GRAPHS[name][0]).exists()]
+        return [name for name in GRAPHS if data_path(GRAPHS[name][0]) is not None]
     unknown = [name for name in names if name not in GRAPHS]
     if unknown:
         raise SystemExit(f"unknown graph(s): {', '.join(unknown)}")
@@ -288,7 +274,7 @@ def run_one(
     args: argparse.Namespace,
 ) -> dict:
     filename = GRAPHS[graph][0]
-    path = DATA / filename
+    path = data_path(filename)
     base = {
         "graph": graph,
         "backend": backend,
@@ -298,8 +284,12 @@ def run_one(
         "max_k": args.max_k,
     }
 
-    if not path.exists():
-        return {**base, "status": "missing", "error": f"missing {path}"}
+    if path is None:
+        return {
+            **base,
+            "status": "missing",
+            "error": f"missing {DATA / filename}",
+        }
 
     worker_cmd = [
         sys.executable,
@@ -408,8 +398,7 @@ def summarise(record: dict) -> str:
             f"{record.get('graph', '?'):14}",
             f"{record.get('backend', '?'):6}",
             f"{record.get('procs', '?'):>2}",
-            f"load={record.get('read_s', '-'):>8}",
-            f"graph={record.get('graph_s', '-'):>8}",
+            f"load={record.get('load_s', '-'):>9}",
             f"solve={record.get('solve_s', '-'):>9}",
             f"peak={record.get('peak_rss_mb', '-'):>9}MB",
             f"maxk={cmax}",

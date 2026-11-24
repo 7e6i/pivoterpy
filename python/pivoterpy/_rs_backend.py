@@ -25,7 +25,7 @@ class RustKernel:
             min_k (int): The minimum clique size to compute.
             max_k (int): The maximum clique size to compute.
         """
-        self.edges = G.edges
+        self.edges = G.edge_bytes()
         self.n = G.n
         self.experimental = G.experimental
         
