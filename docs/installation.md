@@ -80,4 +80,4 @@ P = pvt.pivoter(G)
 print(P.global_counts)  # counts of k-cliques by k
 ```
 
-See [Usage](usage.md) for resolution options (`global` / `vertex` / `edge`), multiprocessing, and result fields.
+See [Usage](usage.md) for resolution options (`global` / `vertex` / `edge`), Rust parallelism (`procs`), and result fields.

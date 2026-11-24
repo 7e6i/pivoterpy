@@ -18,7 +18,7 @@ Implementation notes (high level): degeneracy ordering, neighborhood representat
 
 ## Python (`backend="python"`)
 
-- **What it is:** Pure Python kernel: degeneracy ordering, Succinct Clique Tree (SCT), and optional **`multiprocessing`** when `procs > 1`.
+- **What it is:** Pure Python kernel: degeneracy ordering and Succinct Clique Tree (SCT) exploration. Single-process only; `procs` is ignored.
 - **When to use it:** No Rust toolchain, debugging, teaching, or double-checking results on small instances.
 - **Tradeoff:** Much slower on large or dense graphs than Rust, but no compiled extension.
 
@@ -30,7 +30,7 @@ Implementation notes (high level): degeneracy ordering, neighborhood representat
 |---|------|--------|
 | **Speed** | Fast | Reference speed |
 | **Setup** | Needs compiled module | `pip install` / source without Rust |
-| **Parallelism** | Rayon (`procs`) | `multiprocessing` (`procs`) |
+| **Parallelism** | Rayon (`procs`) | None (single-process) |
 | **Resolutions** | global, vertex, edge | global, vertex, edge |
 
 Outputs are meant to be **consistent** between backends for the same graph and resolution (up to the usual integer arithmetic and any `min_k` / `max_k` truncation rules).
@@ -49,5 +49,5 @@ The repository contains experimental **CUDA** wrapper code (`CUDAKernel` / `_cu_
 |--------|------------------|
 | `ImportError` for `pivoter_rust` | Build or install the extension; or use `backend="python"`. |
 | Rust path slower than expected | Try adjusting `procs`; ensure release build (`maturin develop --release`). |
-| Python MP hangs or errors | Reduce `procs`; test with `procs=1`; check graph size and pickling cost. |
+| Python backend slow | Expected: it is a single-process reference implementation; use the Rust backend for real workloads. |
 | Mismatch Rust vs Python on tiny graph | File a bug with graph + parameters; both backends should agree. |

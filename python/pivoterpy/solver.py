@@ -34,8 +34,10 @@ class pivoter:
                 Case-insensitive. Defaults to "global".
             backend (str, optional): The execution backend. Must be one of "python" ("p")
                 or "rust" ("r"). Case-insensitive. Defaults to "rust".
-            procs (int, optional): The number of processes for multiprocessing.
-                Must be an integer greater than or equal to 1. Defaults to 1.
+            procs (int, optional): The number of worker threads for the Rust
+                backend. Ignored by the pure-Python backend, which is
+                single-process. Must be an integer greater than or equal to 1.
+                Defaults to 1.
             min_k (int | None, optional): Minimum clique size to compute. If provided,
                 must be an integer such that `0 <= min_k <= graph.n`. Cliques of size
                 `k < min_k` are not computed. Defaults to None.
@@ -112,7 +114,6 @@ class pivoter:
             raw_data = PythonKernel(
                 self.graph,
                 self.resolution,
-                self.procs,
                 self._bumped_min, 
                 self._bumped_max, 
             ).execute()

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Standardized global-count stress tests for pivoterpy.
 
-Runs the Rust and pure-Python backends at ``procs`` 1, 2, and 4 against the
-SNAP graphs described in ``stress/stress.md``. Only ``resolution="global"`` is
-covered for now.
+Runs the Rust backend at ``procs`` 1, 2, and 4, and the pure-Python reference
+backend single-process, against the SNAP graphs described in
+``stress/stress.md``. Only ``resolution="global"`` is covered for now.
 
 Each (graph, backend, procs) configuration runs in its own subprocess so that
 peak RSS and failures are isolated. The driver records wall time, load time,
@@ -448,7 +448,14 @@ def main(argv: list[str] | None = None) -> int:
     failures = 0
     for graph in graphs:
         for backend in args.backends:
-            for procs in args.procs:
+            # The Python backend is single-process; procs only affects Rust.
+            backend_procs = [1] if backend == "python" else args.procs
+            if backend == "python" and args.procs != [1]:
+                print(
+                    "note: python backend is single-process; running procs=1 only",
+                    file=sys.stderr,
+                )
+            for procs in backend_procs:
                 for _ in range(args.repeat):
                     record = run_one(graph, backend, procs, args)
                     results.append(record)

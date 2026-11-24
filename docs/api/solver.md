@@ -29,7 +29,7 @@ P = pvt.pivoter(
 | `graph` | (required) | A `pivoterpy.graph.Graph` instance. |
 | `resolution` | `"global"` | `"global"` / `"g"`, `"vertex"` / `"v"`, or `"edge"` / `"e"` (case-insensitive). Finer resolutions can derive coarser ones (e.g. edge → vertex → global) without a second run. |
 | `backend` | `"rust"` | `"rust"` / `"r"` or `"python"` / `"p"`. Rust requires the compiled `pivoter_rust` extension. |
-| `procs` | `1` | Parallelism: Python uses a process pool over level-1 SCT branches when `procs > 1`; Rust uses Rayon with the given thread count. |
+| `procs` | `1` | Parallelism: Rust uses Rayon with the given thread count; the Python backend is single-process and ignores it. |
 | `min_k` | `None` | If set, cliques with `k < min_k` are zeroed out in the stored arrays. Must satisfy `0 <= min_k <= n`. |
 | `max_k` | `None` | If set, counts are truncated so only `k <= max_k` are retained. Must satisfy `0 <= max_k <= n` and `min_k <= max_k` when both set. |
 

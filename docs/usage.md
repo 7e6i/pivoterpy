@@ -51,8 +51,8 @@ Finer resolutions cost more work. The implementation can derive coarser summarie
 
 Parallelism:
 
-- **Python:** `procs > 1` uses a process pool over level-1 branches of the Succinct Clique Tree (SCT); `procs == 1` skips the pool entirely.
 - **Rust:** forwarded as the Rayon thread count for the Rust kernel.
+- **Python:** ignored. The pure-Python reference backend is single-process.
 
 Very large `procs` is not always faster (overhead and memory). Start near your CPU core count and adjust.
 
@@ -81,13 +81,7 @@ Keys for edges are `(u, v)` with `u < v` in **original** vertex ids after any re
 
 ## Interrupts and errors
 
-The Python backend configures worker processes to ignore `SIGINT` so the main process can catch **Ctrl+C** cleanly. Other failures may print a message and exit the process from inside the solver wrapper; see [Backends](backends.md) if the Rust extension fails to import.
-
----
-
-## Multiprocessing notes
-
-Using **`backend="python"`** with **`procs > 1`** forks worker processes. On some platforms, pickling large graphs adds overhead; if debugging, use `procs=1` first.
+**Ctrl+C** is allowed to propagate and cancel the run cleanly. Other failures may print a message and exit the process from inside the solver wrapper; see [Backends](backends.md) if the Rust extension fails to import.
 
 ---
 

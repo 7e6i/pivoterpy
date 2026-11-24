@@ -65,7 +65,7 @@ For each graph in the active tier:
 | Backend | `rust` (required); `python` only on `com-dblp`/small subgraphs |
 | Resolution | `global`, `vertex`, `edge` |
 | `k` range | `[3,3]` (triangles), `[4,4]`, `[4,8]`, `[3,None]` where feasible |
-| `procs` | `1`, physical cores |
+| `procs` | Rust: `1`, `2`, `4`; Python: `1` only (single-process) |
 | Ordering | same graph object reused across runs where possible |
 | Repetitions | 3; report median and max |
 

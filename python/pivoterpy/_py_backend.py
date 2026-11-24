@@ -1,14 +1,8 @@
 # pivoterpy/_py_backend.py
 
 from math import comb
-from multiprocessing import Pool
 from collections import defaultdict
-import signal
 
-
-def init_worker():
-    """Forces worker processes to ignore Ctrl+C so the main thread can handle it."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 class SCTnode:
     """
@@ -48,18 +42,17 @@ class PythonKernel:
     The pure Python execution backend for the Pivoter algorithm.
     
     This class handles the core logic of graph degeneracy ordering, 
-    Succinct Clique Tree (SCT) exploration, and multiprocessing dispatch 
-    to calculate exact clique counts at the requested resolution.
+    Succinct Clique Tree (SCT) exploration, and exact clique counting in a
+    single process. It is the reference implementation used for verification.
     """
 
-    def __init__(self, G, resolution, procs, min_k, max_k):
+    def __init__(self, G, resolution, min_k, max_k):
         """
         Initializes the Python kernel and prepares the graph for processing.
         
         Args:
             G (Graph): The pre-processed graph object.
             resolution (str): The desired output resolution ('g', 'v', or 'e').
-            procs (int): The number of parallel processes to use.
             min_k (int | None): The minimum clique size to compute.
             max_k (int | None): The maximum clique size to compute.
         """
@@ -68,13 +61,10 @@ class PythonKernel:
         self.degrees = G.degrees
 
         self.resolution = resolution
-        self.procs = procs
         self.min_k = min_k
         self.max_k = max_k
 
         self._setup_graph()
-
-        self.chunk_size = max(1, len(self.valid_roots) // (self.procs * 4))
 
 
     def execute(self):
@@ -89,19 +79,9 @@ class PythonKernel:
             self._counts = {e: [] for e in self.edges}
             _branch = self._branch_edge
 
-        if self.procs == 1:
-            for v in self.valid_roots:
-                counts = _branch(v)
-                self._aggregate(counts)
-        else:
-            with Pool(processes=self.procs, initializer=init_worker) as pool:
-                try:
-                    for counts in pool.imap_unordered(_branch, self.valid_roots, chunksize=self.chunk_size):
-                        self._aggregate(counts)
-                except KeyboardInterrupt:
-                    pool.terminate()
-                    raise
-
+        for v in self.valid_roots:
+            counts = _branch(v)
+            self._aggregate(counts)
 
         return self._counts
 
