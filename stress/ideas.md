@@ -1,4 +1,4 @@
-# Performance, memory, and GPU ideas
+# Performance, memory, simplification, and GPU ideas
 
 Written against the post-P0 code (commit `4427768`). Items that have already
 landed are summarized once under [Already landed](#already-landed) and should
@@ -379,16 +379,219 @@ The three ID mappings are fine and none forces `BigUint`:
 
 ---
 
+## 4. Codebase simplification: unify the three Rust resolutions
+
+`src/cpu/core.rs` is 691 lines, of which ~645 are three drivers and three branch
+functions. The algorithmic differences are real (global counts combinatorially
+without history, vertex attributes to `pv`/`hv`, edge attributes to pairs in
+`hv`), but the structure around them is ~85% duplicated. Concretely:
+
+- **Drivers** (`count_global` ~104 lines, `count_vertex` ~128, `count_edge`
+  ~119) repeat: `setup_graph`, `max_p`, `v_prime`, `cancel`/`mpsc`/`thread::
+  spawn`/Rayon pool, `into_par_iter`, per-root local-adjacency build, the
+  `py.check_signals()` poll loop, and trailing-zero truncation. Only the
+  accumulator type, the `fold`+`reduce` merge, and the output key mapping differ.
+- **Branches** (`branch_global` ~84, `branch_vertex` ~100, `branch_edge` ~110)
+  repeat pivot selection, the `p`/`h` split, `excluded_holds`, the stack loop and
+  cancellation. Only the `size == 0` leaf block differs.
+- The `HashMap` merge loop is copy-pasted four times (two `fold`s, two `reduce`s).
+- `SCTnode` vs `SCTnodeChn` in `utils.rs` duplicate the same three fields.
+- The Python backend mirrors the triple structure (`_branch_global`,
+  `_branch_vertex`, `_branch_edge`).
+
+Drift already exists where the copies diverge, and that is where bugs hide:
+
+- `.rev()` on roots in global/vertex but not edge (harmless today, inconsistent).
+- Leaf guards differ: global checks `k >= min_k && k <= max_k`, vertex checks
+  `i > 0 && p > 0`, edge adds `k < 2` and falls back to `ncr_table[0][0]`.
+- The `min_k`/`max_k` window is re-expressed in three places.
+
+### What cannot be merged
+
+Global is deliberately cheaper: no history vectors, one binomial lookup per leaf.
+Forcing it through the vertex attribution would add history to the hot path and is
+a real regression. So merge the scaffolding, not the leaf math.
+
+### Target shape
+
+```
+src/cpu/
+  mod.rs      exports unchanged
+  utils.rs    setup_graph, Csr, precompute_ncr  (node types move out)
+  engine.rs   NEW: one driver + one traversal + merge helpers
+  core.rs     three #[pyfunction] wrappers + three Resolution impls
+```
+
+1. **One node struct, optional history.**
+
+   ```rust
+   pub struct SctNode {
+       pub label: FixedBitSet,
+       pub p: usize,
+       pub h: usize,
+       pub history: Option<History>,   // None for global, Some for vertex/edge
+   }
+   pub struct History { pub pv: Vec<usize>, pub hv: Vec<usize> }
+   ```
+
+   Global gets `None`, so it never allocates history. Cost is a 24-byte `Option`
+   per stack entry and a trivial `None` clone, negligible against `FixedBitSet`.
+   If profiling ever objects, split into two node types later; start simple.
+
+2. **One traversal.**
+
+   ```rust
+   fn branch<R: Resolution>(r: &R, root: SctNode, nbhds: &[FixedBitSet],
+                            min_k: usize, max_k: usize,
+                            cancel: &AtomicBool, ncr: &Ncr) -> R::Acc
+   ```
+
+   The traversal computes `max_i = min(p, max_k - h)` and the `min_k`/`max_k`
+   window once, then calls `r.record_leaf(&node, p, h, max_i, ncr, &mut acc)`.
+   This unifies the three divergent guard sets into one place.
+
+3. **One driver.**
+
+   ```rust
+   fn run<R: Resolution>(py: Python, raw: &[u8], n: usize, procs: usize,
+                         min_k: usize, max_k: usize, r: R) -> PyResult<R::Output>
+   ```
+
+   Owns setup, thread/channel/pool, NCR table, root iteration (`.rev()` for all),
+   local-adjacency build, poll loop and `r.finish(...)`. The `fold`/`reduce`
+   copies collapse behind
+
+   ```rust
+   trait Mergeable: Default + Send { fn merge(&mut self, other: Self); }
+   ```
+
+   with one impl for `Vec<BigUint>` and one generic
+   `impl<K: Eq + Hash + Send> Mergeable for HashMap<K, Vec<BigUint>>`.
+
+4. **Shared helpers.** `build_local_nbhds(cands, &Csr)`, and
+   `truncate_trailing_zeros(&mut Vec<BigUint>) -> bool` (currently three copies).
+   Keep `type Ncr = Vec<Vec<BigUint>>` as an alias so the table-flattening idea
+   above can land without touching call sites.
+
+Each resolution impl then supplies only: accumulator type, root seed (`None` vs
+`hv = [new_v]`), `record_leaf`, and `finish` (truncate, remap keys, normalize
+edges).
+
+### Sequencing (each step independently verifiable)
+
+1. **Global only.** Add `engine.rs`, port `count_global`, leave the other two
+   alone; run the 41 tests and the three existing baselines (`com-dblp`,
+   `as-skitter`, `com-orkut` triangle-only), comparing counts *and* `solve_s`.
+   This proves the generic code monomorphizes to today's hot path.
+2. **Vertex.** Port `count_vertex`; run `test_vertex.py` plus the EC/curvature
+   and derivation tests.
+3. **Edge.** Port `count_edge`; run `test_edge.py` and edge→vertex→global checks.
+4. **Cleanup.** Delete old `branch_*` and the two node structs; `cargo clippy`
+   for dead code; confirm `_rs_backend.py` needed no change.
+
+A small `tests/test_engine_equivalence.py` that cross-checks the handshake
+identities on a few random dense/sparse graphs is cheap insurance and survives
+the refactor.
+
+### Non-goals for this pass
+
+- No `u64`/`BigUint` width dispatch (it would double the leaf variants).
+- No change to `setup_graph`, the CSR layout, or the second-adjacency-copy work.
+- No Python backend unification (mirror the design later if it earns its keep).
+- No API renames; `#[pyfunction]` signatures stay byte-compatible.
+- `edge` stays a full instantiation, just no longer its own driver.
+
+### Risks
+
+- **History leaking into global:** `debug_assert!(history.is_none())` in
+  `branch`, and confirm orkut/skitter `solve_s` stays within noise.
+- **Cancellation semantics:** global returns an empty vec, vertex/edge an empty
+  map; `Mergeable::default()` covers all three, keep the behavior.
+- **Root order:** edge switching to descending is scheduling-only, not results.
+- **Leaf equivalence:** the `ncr` index guards are the real risk, so keep steps
+  1–3 as separate commits with their own test run.
+
+Expected result: ~691 → ~350-400 lines in `core.rs`, one traversal, one driver,
+uniform bounds, no API change — and one poll loop where the section 1 progress
+hooks can live.
+
+---
+
+## 5. Remove the docs website; keep plain Markdown in `docs/`
+
+The documentation currently depends on a static-site generator, GitHub Pages, and
+a separate build workflow:
+
+- `zensical.toml` (~100 lines): Material theme, palettes, MathJax extra JS,
+  search plugin, nav, and a long list of Markdown extensions (emoji, superfences,
+  mermaid, tabbed, arithmatex, …).
+- `.github/workflows/docs.yml`: manual `workflow_dispatch` job that installs
+  Zensical, builds `site/`, uploads a Pages artifact and deploys it.
+- `zensical>=0.0.34` in `[project.optional-dependencies].dev`.
+- `site/` in `.gitignore`.
+- `[project.urls] Documentation = "https://7e6i.github.io/pivoterpy/"` and several
+  README links to that host.
+- Content: `docs/index.md`, `installation.md`, `usage.md`, `backends.md`,
+  `algorithm.md`, `changelog.md`, `api/solver.md`, `api/graph.md`, plus
+  `docs/javascripts/mathjax.js`.
+
+The prose is the valuable part; the site is plumbing that must be kept in sync,
+adds a dependency to the dev extra, and only deploys manually anyway.
+
+### Proposal
+
+Keep `docs/` as ordinary Markdown and read it on GitHub:
+
+- Delete `zensical.toml`, `.github/workflows/docs.yml`,
+  `docs/javascripts/mathjax.js`, and the `zensical` dev dependency; drop `site/`
+  from `.gitignore`.
+- Add a short `docs/README.md` (or a top-of-folder table of contents) that links
+  the pages, since GitHub has no rendered nav.
+- Point `[project.urls].Documentation` at the repo's `docs/` directory (or remove
+  it) and change README links from
+  `https://7e6i.github.io/pivoterpy/installation/` to relative `docs/installation.md`.
+  PyPI renders `project.urls` as a link, so a GitHub URL is fine.
+- Check every intra-doc link: they are already relative (`solver.md`, `graph.md`,
+  `usage.md`, …), which works on GitHub as long as paths are correct relative to
+  the containing file; verify `docs/api/*.md` → `../usage.md` style links.
+- Math: GitHub does not render `$...$` or `$$...$$`. The formulas live mainly in
+  `algorithm.md` (and some in `backends.md`/`usage.md`). Either accept literal
+  LaTeX, or convert the handful of essential display formulas to fenced text or
+  plain notation. Simpler than keeping a renderer just for that page.
+- Optional: keep Mermaid/emoji syntax only where GitHub natively renders it
+  (fenced ` ```mermaid ` blocks and `:emoji:` shortcodes work on GitHub), and drop
+  the extensions that do not.
+
+### Trade-offs
+
+- Lost: site search, themes, per-page nav, rendered math, custom permalinks.
+- Gained: no generator version to track, no `zensical.toml` to maintain, no Pages
+  settings/workflow, no `site/` build artifacts, docs always match the repo, and
+  one less dev dependency for contributors.
+- If a site is wanted later, GitHub Pages can render the same `docs/` folder with
+  a built-in Jekyll theme and zero local build (add `.nojekyll` only if needed);
+  no content rewrite required.
+
+Verification: `grep -rn "7e6i.github.io\|zensical\|site/"` across the repo, make
+sure the README/PyPI links resolve, and click through `docs/` on GitHub.
+
+---
+
 ## Suggested order
 
-1. **`verbose` flag + stage timings + root-cost histogram.** Cheap, unblocks
+1. **Unify the three Rust resolutions (section 4).** Do this *before* the
+   verbose hooks, so progress reporting lands in one driver instead of three,
+   and the leaf guards stop drifting.
+2. **`verbose` flag + stage timings + root-cost histogram.** Cheap, unblocks
    everything else, and directly addresses the "40 minutes with no output"
    problem.
-2. **Root batching for the tail + degeneracy-rank relabeling.** Cuts both time
+3. **Root batching for the tail + degeneracy-rank relabeling.** Cuts both time
    overhead and the remaining adjacency memory.
-3. **Fix `_cleanup`/`_remapping` and add a compact `edge` output.** Only if
+4. **Fix `_cleanup`/`_remapping` and add a compact `edge` output.** Only if
    local resolutions matter at SNAP scale.
-4. **GPU prototype for `k=3` tail roots**, then decide with the histogram
+5. **GPU prototype for `k=3` tail roots**, then decide with the histogram
    whether kernel B is worth it.
-5. Width-adaptive `u64`/`BigUint` if profiling shows big-int cost is real
+6. Width-adaptive `u64`/`BigUint` if profiling shows big-int cost is real
    (profile first; do not assume).
+7. **Drop the docs website (section 5).** Independent of everything above and
+   can happen at any time; it is pure maintenance removal.
